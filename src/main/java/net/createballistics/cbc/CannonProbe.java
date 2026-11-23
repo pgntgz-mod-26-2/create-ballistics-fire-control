@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
@@ -98,7 +99,7 @@ public final class CannonProbe {
     @Nullable
     public static ProbedCannon probe(Level level, BlockPos mountPos,
                                      double fallbackBarrelLength, double fallbackPivotOffsetY) {
-        if (level == null || level.isClientSide) {
+        if (level == null || level.isClientSide()) {
             return null;
         }
         if (!(level.getBlockEntity(mountPos) instanceof CannonMountBlockEntity mount)) {
@@ -204,7 +205,9 @@ public final class CannonProbe {
                 chargeCount++;
                 // ⚠️ 用外层的 block 而不是 propellant —— 后者是接口（BigCannonPropellantBlock），
                 // 拿不到 ItemStack。显示名要的是方块物品的名字（大型弹药 / 发射药 Mk.IV 之类）。
-                propellantItemId = new ItemStack(block).getDescriptionId();
+                propellantItemId = block.asItem() != Items.AIR
+                        ? block.asItem().getDescriptionId()
+                        : block.getDescriptionId();
 
                 // 顺便问 GB：这一包药的<b>真实</b>药重与装药长是多少。
                 // ⚠️ 不能拿「装药强度 ÷ 2」去反推 —— 那假设了"每包强度 = 2"（只有 CBC 标准黑火药成立），
@@ -236,7 +239,9 @@ public final class CannonProbe {
                 shell = projectileBlock.getProjectile(level, ItemStack.EMPTY);
                 // 弹种名：存方块的 descriptionId，客户端再翻译。附属模组的新弹种会自动带上它自己的
                 // 翻译（武器拓展那几种已汉化），查不到就退回键名，不会显示成乱码。
-                shellItemId = new ItemStack(projectileBlock).getDescriptionId();
+                shellItemId = block.asItem() != Items.AIR
+                        ? block.asItem().getDescriptionId()
+                        : block.getDescriptionId();
                 // 读弹种自带的弹道属性（CBC 原版物理用）—— 照抄参考模组 firecontrol 的 scanCannon()。
                 // `getBallisticProperties()` 在 CBC 里是 protected，外部只能经 CBCMunitionPropertiesHandlers
                 // 按弹丸类型取；引信弹和惰性弹是两套 properties，所以要分两支。

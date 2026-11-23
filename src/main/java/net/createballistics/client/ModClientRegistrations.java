@@ -1,26 +1,17 @@
 package net.createballistics.client;
 
-import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import net.createballistics.CreateBallistics;
 import net.createballistics.client.sound.DroneEngineSound;
 import net.createballistics.entity.DroneEntity;
-import net.createballistics.item.MonitorItem;
 import net.createballistics.registry.ModBlockEntities;
 import net.createballistics.registry.ModEntities;
-import net.createballistics.registry.ModItems;
-import net.createmod.catnip.render.CachedBuffers;
-import net.createmod.catnip.render.SuperByteBufferCache;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.item.ItemProperties;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.RegisterNamedRenderTypesEvent;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 
 /**
@@ -55,39 +46,16 @@ public final class ModClientRegistrations {
     }
 
     @SubscribeEvent
-    public static void clientInit(FMLClientSetupEvent event) {
-        // ---- SuperByteBuffer 分区 ----
-        // Create 在 CreateClient.clientInit 里做了同样的事。不注册的话用不了 CachedBuffers，
-        // 症状是形状位置都对、颜色全黑。重复注册是幂等的（内部只是 caches.put）。
-        SuperByteBufferCache cache = SuperByteBufferCache.getInstance();
-        cache.registerCompartment(CachedBuffers.PARTIAL);
-        cache.registerCompartment(CachedBuffers.DIRECTIONAL_PARTIAL);
-        cache.registerCompartment(KineticBlockEntityRenderer.KINETIC_BLOCK);
-
-        // ---- 遥控器的「已绑定」图标（黑屏 → 蓝屏）----
-        // 照卓越前线：物品模型里挂一条 overrides 判据，值由这里算（它读的是物品 NBT 的 Linked 布尔）。
-        // ⚠️ 必须 enqueueWork —— FMLClientSetupEvent 跑在并行加载线程上，注册物品属性要回到主线程。
-        event.enqueueWork(() -> ItemProperties.register(ModItems.MONITOR.get(),
-                CreateBallistics.id("linked"),
-                (stack, level, entity, seed) -> MonitorItem.linkedDrone(stack) != null ? 1.0F : 0.0F));
-    }
-
-    // note: this file used to register two things for the drone part models --
-    // a custom geometry loader and a named render type. Both belonged to the early
-    // convert-Bedrock-to-vanilla pipeline; the drone is now rendered by GeckoLib
-    // straight from the Bedrock model (see client/model/DroneModel), and both of those,
-    // the 5 hidden part items and the converter script have been deleted.
-    @SubscribeEvent
     public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
         // 火控节点：应力接入面在<b>正面</b>（FACING）。它的 FACING 是六向的 DirectionalKineticBlock.FACING。
         event.registerBlockEntityRenderer(ModBlockEntities.FIRE_CONTROL_NODE.get(),
-                ctx -> new FireControlShaftRenderer<>(BlockStateProperties.FACING, true));
+                ctx -> new FireControlShaftRenderer<>(ctx, BlockStateProperties.FACING, true));
 
         // 火控计算机 / 协调器：应力接入面在<b>背面</b>（FACING 的反面）。FACING 是水平四向的。
         event.registerBlockEntityRenderer(ModBlockEntities.FIRE_CONTROL_COMPUTER.get(),
-                ctx -> new FireControlShaftRenderer<>(BlockStateProperties.HORIZONTAL_FACING, false));
+                ctx -> new FireControlShaftRenderer<>(ctx, BlockStateProperties.HORIZONTAL_FACING, false));
         event.registerBlockEntityRenderer(ModBlockEntities.FIRE_CONTROL_COORDINATOR.get(),
-                ctx -> new FireControlShaftRenderer<>(BlockStateProperties.HORIZONTAL_FACING, false));
+                ctx -> new FireControlShaftRenderer<>(ctx, BlockStateProperties.HORIZONTAL_FACING, false));
 
         // 无人机：GeckoLib 渲染（直接读卓越前线那份 Bedrock 模型，见 client/model/DroneModel）
         event.registerEntityRenderer(ModEntities.DRONE.get(), DroneRenderer::new);
@@ -108,6 +76,7 @@ public final class ModClientRegistrations {
     /** 按键。注册过的按键才会出现在「选项 → 控制」里，玩家也才改得动。 */
     @SubscribeEvent
     public static void registerKeyMappings(RegisterKeyMappingsEvent event) {
+        event.registerCategory(ModKeyMappings.CATEGORY);
         event.register(ModKeyMappings.OPEN_INDICATOR);
         // 操控无人机那几个（照卓越前线：它也是单独注册一套，玩家能单独改）
         event.register(ModKeyMappings.MOVE_FORWARD);

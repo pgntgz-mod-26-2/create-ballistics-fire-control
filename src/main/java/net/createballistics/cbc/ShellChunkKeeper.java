@@ -77,15 +77,15 @@ public final class ShellChunkKeeper {
         if (owner == null) {
             owner = shell.getUUID();
         }
-        ChunkPos now = new ChunkPos(shell.blockPosition());
+        ChunkPos now = ChunkPos.containing(shell.blockPosition());
         if (now.equals(forced)) {
             return;   // 还在同一个区块里，什么都不用做
         }
         if (forced != null) {
-            controller.forceChunk(level, owner, forced.x, forced.z, false, true);
+            controller.forceChunk(level, owner, forced.x(), forced.z(), false, true);
             forced = null;
         }
-        if (controller.forceChunk(level, owner, now.x, now.z, true, true)) {
+        if (controller.forceChunk(level, owner, now.x(), now.z(), true, true)) {
             forced = now;
         }
     }
@@ -93,7 +93,7 @@ public final class ShellChunkKeeper {
     /** 结账（落地 / 消失 / 放弃跟踪）时调：把票放掉，不在世界里留永久加载区。 */
     public void release(ServerLevel level) {
         if (controller != null && owner != null && forced != null) {
-            controller.forceChunk(level, owner, forced.x, forced.z, false, true);
+            controller.forceChunk(level, owner, forced.x(), forced.z(), false, true);
         }
         forced = null;
     }

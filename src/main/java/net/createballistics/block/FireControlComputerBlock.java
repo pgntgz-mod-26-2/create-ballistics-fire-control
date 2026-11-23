@@ -1,17 +1,10 @@
 package net.createballistics.block;
 
 import com.simibubi.create.content.kinetics.base.IRotate.SpeedLevel;
-import java.util.List;
 import net.createballistics.block.entity.FireControlComputerBlockEntity;
 import net.createballistics.registry.ModBlockEntities;
-import net.createballistics.util.Tooltips;
-import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -26,13 +19,6 @@ public class FireControlComputerBlock
 
     public FireControlComputerBlock(Properties properties) {
         super(properties);
-    }
-
-    /** 方块物品的说明（正文在语言键里，按 {@code \n} 拆行）。 */
-    @Override
-    public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip,
-                                TooltipFlag flag) {
-        Tooltips.addLines(tooltip, "block.create_ballistics.fire_control_computer.help", ChatFormatting.GRAY);
     }
 
     @Override
@@ -61,7 +47,7 @@ public class FireControlComputerBlock
 
     @Override
     protected InteractionResult openScreen(Level level, BlockPos pos) {
-        if (level.isClientSide) {
+        if (level.isClientSide()) {
             net.createballistics.client.ClientHooks.openComputerScreen(pos);
             return InteractionResult.SUCCESS;
         }

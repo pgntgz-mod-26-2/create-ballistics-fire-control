@@ -6,15 +6,17 @@ import net.createballistics.item.MonitorItem;
 import net.createballistics.net.DroneControlC2SPacket;
 import net.createballistics.net.DroneLookC2SPacket;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.player.Input;
+import net.minecraft.client.player.ClientInput;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.player.Input;
+import net.minecraft.world.phys.Vec2;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.MovementInputUpdateEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 /**
  * 操控无人机的<b>客户端</b>那一半：采集输入、发给服务端，并按住玩家本体
@@ -119,7 +121,7 @@ public final class DroneControlClient {
         short keys = currentKeys();
         if (keys != lastKeys) {
             lastKeys = keys;
-            PacketDistributor.sendToServer(new DroneControlC2SPacket(keys));
+            ClientPacketDistributor.sendToServer(new DroneControlC2SPacket(keys));
         }
 
         // ---- 鼠标：每 tick 都发 ----
@@ -129,7 +131,7 @@ public final class DroneControlClient {
         double deltaY = 0.0;
         // ⚠️ 开着界面时鼠标是自由光标，位移没有意义（而且会是一个巨大的跳变）——
         //    那时发 0，并且把基准点跟住，关界面的那一帧才不会跳。
-        if (mc.screen == null) {
+        if (mc.gui.screen() == null) {
             deltaX = Mth.clamp(mouseX - lastMouseX, -MOUSE_DELTA_LIMIT, MOUSE_DELTA_LIMIT);
             deltaY = Mth.clamp(mouseY - lastMouseY, -MOUSE_DELTA_LIMIT, MOUSE_DELTA_LIMIT);
         }
@@ -148,7 +150,7 @@ public final class DroneControlClient {
             localDrone.predictLookLocal(lerpSpeedX, lerpSpeedY);
         }
 
-        PacketDistributor.sendToServer(new DroneLookC2SPacket(lerpSpeedX, lerpSpeedY));
+        ClientPacketDistributor.sendToServer(new DroneLookC2SPacket(lerpSpeedX, lerpSpeedY));
     }
 
     /** 此刻按着哪些键 —— 位号见 {@link DroneEntity#KEY_LEFT} 那一组（与卓越前线一致）。 */
@@ -191,14 +193,8 @@ public final class DroneControlClient {
                 || !MonitorItem.isPiloting(player.getMainHandItem())) {
             return;
         }
-        Input input = event.getInput();
-        input.up = false;
-        input.down = false;
-        input.left = false;
-        input.right = false;
-        input.jumping = false;
-        input.shiftKeyDown = false;
-        input.forwardImpulse = 0.0F;
-        input.leftImpulse = 0.0F;
+        ClientInput input = event.getInput();
+        input.keyPresses = Input.EMPTY;
+        input.moveVector = Vec2.ZERO;
     }
 }

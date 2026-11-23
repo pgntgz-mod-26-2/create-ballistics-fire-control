@@ -8,11 +8,12 @@ import net.createballistics.block.entity.FireControlNodeBlockEntity;
 import net.createballistics.ballistic.FireMode;
 import net.createballistics.util.PosDisplay;
 import net.createballistics.util.Texts;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * 火控协调器界面 —— <b>纯显示，没有任何按键</b>。
@@ -40,7 +41,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public class FireControlCoordinatorScreen extends Screen {
 
-    private static final ResourceLocation PANEL = CreateBallistics.id("textures/gui/panel/coordinator.png");
+    private static final Identifier PANEL = CreateBallistics.id("textures/gui/panel/coordinator.png");
 
     public static final int W = 560;
     public static final int H = 300;
@@ -113,29 +114,29 @@ public class FireControlCoordinatorScreen extends Screen {
     // ---------------------------------------------------------------- 渲染
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         // ⚠️⚠️ **顺序要紧：面板不透明（实测 A=255），必须先铺底、再画按钮** ——
         //     反了的话按钮文字与悬停高亮会被面板整块压掉（2026-09-26 大包实测报的"按键失效"）。
-        graphics.blit(PANEL, originX, originY, 0.0F, 0.0F, W, H, W, H);
+        graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL, originX, originY, 0.0F, 0.0F, W, H, W, H);
 
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
-        graphics.pose().pushPose();
-        graphics.pose().translate(originX, originY, 0.0F);
-        graphics.pose().scale(TEXT_SCALE, TEXT_SCALE, 1.0F);
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(originX, originY);
+        graphics.pose().scale(TEXT_SCALE, TEXT_SCALE);
         renderValues(graphics);
-        graphics.pose().popPose();
+        graphics.pose().popMatrix();
     }
 
-    private void renderValues(GuiGraphics graphics) {
+    private void renderValues(GuiGraphicsExtractor graphics) {
         int tx = Math.round(16 / TEXT_SCALE);
         int ty = Math.round(12 / TEXT_SCALE);
 
-        graphics.drawString(font, title, tx, ty, TITLE);
+        graphics.text(font, title, tx, ty, TITLE);
         ty += LINE_H * 2;
 
         if (be == null) {
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.no_data").getString(), tx, ty, BAD);
+            graphics.text(font, Component.translatable("gui.create_ballistics.no_data").getString(), tx, ty, BAD);
             return;
         }
 
@@ -153,7 +154,7 @@ public class FireControlCoordinatorScreen extends Screen {
             // ⚠️ 这里**不能**再拿 master 当标签前缀：那个键现在是「已接入火控计算机」，
             // 接在「未接入…」前面会变成「已接入火控计算机: 未接入」—— 自相矛盾。
             // 未接入时直接把话说完整就行。
-            graphics.drawString(font,
+            graphics.text(font,
                     Component.translatable("gui.create_ballistics.master_none").getString(), tx, ty, WARN);
             ty += LINE_H;
         }
@@ -163,7 +164,7 @@ public class FireControlCoordinatorScreen extends Screen {
         // 文案用**协调器专用**的那条键（"没有扫描任何炮位"只说协调器；
         // 计算机那边是"算不出射击诸元"，见 power_short_computer）。
         if (!be.hasRotationPower()) {
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.power_short_coordinator",
+            graphics.text(font, Component.translatable("gui.create_ballistics.power_short_coordinator",
                     Texts.num("%.0f", Math.abs(be.getSpeed())),
                     Texts.num("%.0f", be.requiredRpm())).getString(), tx, ty, BAD);
             ty += LINE_H;
@@ -180,7 +181,7 @@ public class FireControlCoordinatorScreen extends Screen {
             // 接在数值后面（同样的坐标算法，只是再往右挪一点点）
             String nodesLabel = Component.translatable("gui.create_ballistics.nodes").getString() + ": ";
             String countText = count + " / " + max;
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.at_limit").getString(),
+            graphics.text(font, Component.translatable("gui.create_ballistics.at_limit").getString(),
                     tx + font.width(nodesLabel) + font.width(countText) + 6, ty - LINE_H, WARN);
         }
 
@@ -217,11 +218,11 @@ public class FireControlCoordinatorScreen extends Screen {
                 msg = Component.translatable("gui.create_ballistics.no_nodes",
                         FireControlCoordinatorBlockEntity.SCAN_RADIUS);
             }
-            graphics.drawString(font, msg.getString(), tx, ty, MUTED);
+            graphics.text(font, msg.getString(), tx, ty, MUTED);
             return;
         }
 
-        graphics.drawString(font, Component.translatable("gui.create_ballistics.node_list").getString(), tx, ty, MUTED);
+        graphics.text(font, Component.translatable("gui.create_ballistics.node_list").getString(), tx, ty, MUTED);
         ty += LINE_H;
 
         int index = 1;
@@ -278,7 +279,7 @@ public class FireControlCoordinatorScreen extends Screen {
                         state).getString();
             }
 
-            graphics.drawString(font, row, tx, ty, color);
+            graphics.text(font, row, tx, ty, color);
             ty += LINE_H;
             if (ty > Math.round(288 / TEXT_SCALE)) {
                 break;
@@ -305,13 +306,13 @@ public class FireControlCoordinatorScreen extends Screen {
                 : Texts.translatedOrShort(id);
     }
 
-    private int line(GuiGraphics graphics, int x, int y, String key, String value, int color) {
+    private int line(GuiGraphicsExtractor graphics, int x, int y, String key, String value, int color) {
         String text = Component.translatable(key).getString() + ": ";
-        graphics.drawString(font, text, x, y, MUTED);
+        graphics.text(font, text, x, y, MUTED);
         if (value != null) {
-            graphics.drawString(font, value, x + font.width(text), y, color);
+            graphics.text(font, value, x + font.width(text), y, color);
         } else {
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.no_target").getString(),
+            graphics.text(font, Component.translatable("gui.create_ballistics.no_target").getString(),
                     x + font.width(text), y, color);
         }
         return y + LINE_H;

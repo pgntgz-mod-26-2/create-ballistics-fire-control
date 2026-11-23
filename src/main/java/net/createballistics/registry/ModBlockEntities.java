@@ -19,18 +19,18 @@ public class ModBlockEntities {
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FireControlNodeBlockEntity>> FIRE_CONTROL_NODE =
             BLOCK_ENTITIES.register("fire_control_node",
-                    () -> BlockEntityType.Builder.of(FireControlNodeBlockEntity::new,
-                            new Block[]{ModBlocks.FIRE_CONTROL_NODE.get()}).build(null));
+                    () -> new BlockEntityType<>(FireControlNodeBlockEntity::new,
+                            Set.of(ModBlocks.FIRE_CONTROL_NODE.get())));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FireControlCoordinatorBlockEntity>> FIRE_CONTROL_COORDINATOR =
             BLOCK_ENTITIES.register("fire_control_coordinator",
-                    () -> BlockEntityType.Builder.of(FireControlCoordinatorBlockEntity::new,
-                            new Block[]{ModBlocks.FIRE_CONTROL_COORDINATOR.get()}).build(null));
+                    () -> new BlockEntityType<>(FireControlCoordinatorBlockEntity::new,
+                            Set.of(ModBlocks.FIRE_CONTROL_COORDINATOR.get())));
 
     public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FireControlComputerBlockEntity>> FIRE_CONTROL_COMPUTER =
             BLOCK_ENTITIES.register("fire_control_computer",
-                    () -> BlockEntityType.Builder.of(FireControlComputerBlockEntity::new,
-                            new Block[]{ModBlocks.FIRE_CONTROL_COMPUTER.get()}).build(null));
+                    () -> new BlockEntityType<>(FireControlComputerBlockEntity::new,
+                            Set.of(ModBlocks.FIRE_CONTROL_COMPUTER.get())));
 
     public static void register(IEventBus eventBus) {
         BLOCK_ENTITIES.register(eventBus);

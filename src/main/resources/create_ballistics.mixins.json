@@ -1,16 +1,16 @@
 {
   "required": true,
-  "minVersion": "0.8",
   "package": "net.createballistics.mixin",
-  "compatibilityLevel": "JAVA_21",
-  "mixins": [
-    "PitchOrientedContraptionEntityMixin"
-  ],
+  "compatibilityLevel": "JAVA_25",
   "client": [
     "CameraMixin",
+    "GuiGraphicsExtractorAccessor",
     "GuiSpyglassOverlayMixin",
     "MouseHandlerMixin",
     "PlayerItemInHandLayerMixin"
+  ],
+  "mixins": [
+    "PitchOrientedContraptionEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1

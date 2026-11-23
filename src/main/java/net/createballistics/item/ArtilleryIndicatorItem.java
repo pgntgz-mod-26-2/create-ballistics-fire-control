@@ -2,6 +2,7 @@ package net.createballistics.item;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import net.createballistics.ballistic.ArcMode;
 import net.createballistics.ballistic.FireMode;
 import net.createballistics.block.entity.FireControlComputerBlockEntity;
@@ -15,17 +16,19 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
 import net.minecraft.world.item.TooltipFlag;
-import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.neoforged.api.distmarker.Dist;
@@ -36,7 +39,7 @@ import org.jetbrains.annotations.Nullable;
  * 火炮指示器 —— 观测层的核心物品，<b>三合一</b>（照着卓越前线的 {@code ArtilleryIndicatorItem} 的分工）：
  *
  * <ol>
- *   <li><b>望远镜</b>：按住右键。{@link UseAnim#SPYGLASS} 让原版自己给出开镜姿势与变焦。</li>
+ *   <li><b>望远镜</b>：按住右键。{@link ItemUseAnimation#SPYGLASS} 让原版自己给出开镜姿势与变焦。</li>
  *   <li><b>绑定器</b>：潜行右键<b>火控计算机</b> = 绑定 / 解绑。</li>
  *   <li><b>配置与开火</b>：H 键开配置界面、左键按住开火、中键取坐标 —— <b>后面几轮再做</b>。</li>
  * </ol>
@@ -73,8 +76,8 @@ public class ArtilleryIndicatorItem extends Item {
     }
 
     @Override
-    public UseAnim getUseAnimation(ItemStack stack) {
-        return UseAnim.SPYGLASS;
+    public ItemUseAnimation getUseAnimation(ItemStack stack) {
+        return ItemUseAnimation.SPYGLASS;
     }
 
     /**
@@ -92,7 +95,8 @@ public class ArtilleryIndicatorItem extends Item {
      * 免得日后又有什么东西把能力塞给我们的物品。
      */
     @Override
-    public boolean canPerformAction(ItemStack stack, net.neoforged.neoforge.common.ItemAbility ability) {
+    public boolean canPerformAction(net.minecraft.world.item.ItemInstance stack,
+                                    net.neoforged.neoforge.common.ItemAbility ability) {
         return ability != net.neoforged.neoforge.common.ItemAbilities.SPYGLASS_SCOPE
                 && super.canPerformAction(stack, ability);
     }
@@ -104,13 +108,13 @@ public class ArtilleryIndicatorItem extends Item {
      * 副手也举镜子只会让那个组合变得没法用。
      */
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
         if (hand == InteractionHand.OFF_HAND) {
-            return InteractionResultHolder.fail(player.getItemInHand(hand));
+            return InteractionResult.FAIL;
         }
         player.playSound(SoundEvents.SPYGLASS_USE, 1.0F, 1.0F);
         player.startUsingItem(hand);
-        return InteractionResultHolder.consume(player.getItemInHand(hand));
+        return InteractionResult.CONSUME;
     }
 
     @Override
@@ -120,8 +124,9 @@ public class ArtilleryIndicatorItem extends Item {
     }
 
     @Override
-    public void releaseUsing(ItemStack stack, Level level, LivingEntity entity, int timeCharged) {
+    public boolean releaseUsing(ItemStack stack, Level level, LivingEntity entity, int timeCharged) {
         entity.playSound(SoundEvents.SPYGLASS_STOP_USING, 1.0F, 1.0F);
+        return false;
     }
 
     // ------------------------------------------------------------------
@@ -164,7 +169,7 @@ public class ArtilleryIndicatorItem extends Item {
         }
 
         ItemStack stack = context.getItemInHand();
-        if (level.isClientSide) {
+        if (level.isClientSide()) {
             return InteractionResult.SUCCESS;   // 客户端只负责把手势消费掉，真正的改动全在服务端
         }
 
@@ -183,13 +188,13 @@ public class ArtilleryIndicatorItem extends Item {
             stack.remove(ModDataComponents.LAST_TARGET.get());
             stack.remove(ModDataComponents.MIRROR_COORDINATORS.get());
             computer.releaseIndicator(myId);
-            player.displayClientMessage(Component.translatable(
+            player.sendOverlayMessage(Component.translatable(
                     "item.create_ballistics.artillery_indicator.bind.off",
-                    shownPos.getX(), shownPos.getY(), shownPos.getZ()).withStyle(ChatFormatting.RED), true);
+                    shownPos.getX(), shownPos.getY(), shownPos.getZ()).withStyle(ChatFormatting.RED));
         } else if (computer.hasIndicator() && !computer.isOwner(myId)) {
             // ② 已经被别的指示器绑走了 —— 一对一永久配对，这里解不开（重置只能拆掉这台计算机）
-            player.displayClientMessage(Component.translatable(
-                    "item.create_ballistics.artillery_indicator.taken").withStyle(ChatFormatting.RED), true);
+            player.sendOverlayMessage(Component.translatable(
+                    "item.create_ballistics.artillery_indicator.taken").withStyle(ChatFormatting.RED));
         } else {
             // ③ 绑定 / 改绑
             //    改绑时先把旧的那台放开，否则它会被一个再也回不来的指示器永久占着（同样只能拆）
@@ -201,9 +206,9 @@ public class ArtilleryIndicatorItem extends Item {
             stack.set(ModDataComponents.BOUND_COMPUTER.get(), pos);
             stack.remove(ModDataComponents.LAST_TARGET.get());
             stack.remove(ModDataComponents.MIRROR_COORDINATORS.get());
-            player.displayClientMessage(Component.translatable(
+            player.sendOverlayMessage(Component.translatable(
                     "item.create_ballistics.artillery_indicator.bind.ok",
-                    shownPos.getX(), shownPos.getY(), shownPos.getZ()).withStyle(ChatFormatting.GREEN), true);
+                    shownPos.getX(), shownPos.getY(), shownPos.getZ()).withStyle(ChatFormatting.GREEN));
         }
         // 绑定/解绑刻意<b>不给音效</b>：2026-09-22 用户明确说不要（只有中键报点那一声）。
         return InteractionResult.CONSUME;
@@ -288,8 +293,8 @@ public class ArtilleryIndicatorItem extends Item {
      * 「未设定目标」是一致的（开火后计算机自己会清目标，标记也就该消失）。
      */
     @Override
-    public void inventoryTick(ItemStack stack, Level level, Entity entity, int slot, boolean selected) {
-        if (level.isClientSide || level.getGameTime() % TARGET_MIRROR_INTERVAL != 0
+    public void inventoryTick(ItemStack stack, ServerLevel level, Entity entity, @Nullable EquipmentSlot slot) {
+        if (level.getGameTime() % TARGET_MIRROR_INTERVAL != 0
                 || !(entity instanceof Player player)) {
             return;
         }
@@ -450,24 +455,24 @@ public class ArtilleryIndicatorItem extends Item {
      * （检查手段：{@code node tools/scan_client_refs.js <产物.jar>} 应当是 0。）
      */
     private static String openKeyName() {
-        if (FMLEnvironment.dist != Dist.CLIENT) {
+        if (FMLEnvironment.getDist() != Dist.CLIENT) {
             return "?";
         }
         return ModKeyMappings.openIndicatorKeyName();
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip,
-                                TooltipFlag flag) {
+    public void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay display,
+                                Consumer<Component> tooltip, TooltipFlag flag) {
         // ⚠️ [H] 那个键名**跟着键位走**（玩家改成 G，这里就显示 G）—— 见 openKeyName()
         Tooltips.addLines(tooltip, "item.create_ballistics.artillery_indicator.help",
                 ChatFormatting.GRAY, openKeyName());
-        tooltip.add(Component.empty());   // 操作说明与"副手玩法"之间空一行（用户 2026-09-24 定的版式）
+        tooltip.accept(Component.empty());   // 操作说明与"副手玩法"之间空一行（用户 2026-09-24 定的版式）
         Tooltips.addLines(tooltip, "item.create_ballistics.artillery_indicator.help2", ChatFormatting.GRAY);
 
         BlockPos bound = boundComputer(stack);
         if (bound == null) {
-            tooltip.add(Component.translatable("item.create_ballistics.artillery_indicator.unbound")
+            tooltip.accept(Component.translatable("item.create_ballistics.artillery_indicator.unbound")
                     .withStyle(ChatFormatting.DARK_GRAY));
             return;
         }
@@ -478,10 +483,10 @@ public class ArtilleryIndicatorItem extends Item {
         // ⚠️ 显示用坐标走 PosDisplay（航空学物理结构上是图幅坐标）；bound 本身保持原坐标查方块实体。
         BlockPos shownBound = PosDisplay.of(level, bound);
         if (level != null && liveBoundComputer(stack, level) == null) {
-            tooltip.add(Component.translatable("item.create_ballistics.artillery_indicator.bound_missing",
+            tooltip.accept(Component.translatable("item.create_ballistics.artillery_indicator.bound_missing",
                     shownBound.getX(), shownBound.getY(), shownBound.getZ()).withStyle(ChatFormatting.GOLD));
         } else {
-            tooltip.add(Component.translatable("item.create_ballistics.artillery_indicator.bound",
+            tooltip.accept(Component.translatable("item.create_ballistics.artillery_indicator.bound",
                     shownBound.getX(), shownBound.getY(), shownBound.getZ()).withStyle(ChatFormatting.AQUA));
         }
     }

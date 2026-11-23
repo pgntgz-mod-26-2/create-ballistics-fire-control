@@ -61,7 +61,7 @@ public final class DroneViewEvents {
         Minecraft mc = Minecraft.getInstance();
         // ⚠️ **不要乘 10**（同 IndicatorClientEvents 的注释）：那 0.1 是乘在**基准**上的，
         //    我们既然从选项值重算，就已经绕开了它。
-        event.setFOV(mc.options.fov().get() / zoomLerp);
+        event.setFOV((float) (mc.options.fov().get() / zoomLerp));
     }
 
     /** 滚轮 = 调焦（照它：{@code droneFov = clamp(droneFov + 0.4 × scroll, 1, 6)}）。 */

@@ -17,10 +17,10 @@ public final class ClientHooks {
     }
 
     public static void openCoordinatorScreen(BlockPos pos) {
-        Minecraft.getInstance().setScreen(new FireControlCoordinatorScreen(pos));
+        Minecraft.getInstance().setScreenAndShow(new FireControlCoordinatorScreen(pos));
     }
 
     public static void openComputerScreen(BlockPos pos) {
-        Minecraft.getInstance().setScreen(new FireControlComputerScreen(pos));
+        Minecraft.getInstance().setScreenAndShow(new FireControlComputerScreen(pos));
     }
 }

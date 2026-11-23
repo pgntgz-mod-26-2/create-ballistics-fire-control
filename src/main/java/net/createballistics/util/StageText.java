@@ -83,11 +83,11 @@ public final class StageText {
         }
 
         public static Snapshot fromTag(CompoundTag tag) {
-            return new Snapshot(tag.getBoolean("Powered"), tag.getBoolean("HasTarget"),
-                    tag.getInt("Coordinators"), tag.getInt("Cannons"), tag.getInt("Ready"),
-                    tag.getInt("Unsolvable"), tag.getInt("FailedFires"), tag.getBoolean("Rolling"),
-                    tag.getLong("SalvoEndTick"), tag.getBoolean("PlatformMoving"),
-                    tag.contains("FailKey") ? tag.getString("FailKey") : null);
+            return new Snapshot(tag.getBooleanOr("Powered", false), tag.getBooleanOr("HasTarget", false),
+                    tag.getIntOr("Coordinators", 0), tag.getIntOr("Cannons", 0), tag.getIntOr("Ready", 0),
+                    tag.getIntOr("Unsolvable", 0), tag.getIntOr("FailedFires", 0), tag.getBooleanOr("Rolling", false),
+                    tag.getLongOr("SalvoEndTick", 0L), tag.getBooleanOr("PlatformMoving", false),
+                    tag.getString("FailKey").orElse(null));
         }
     }
 

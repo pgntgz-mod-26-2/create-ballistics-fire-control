@@ -1,6 +1,7 @@
 package net.createballistics.item;
 
 import java.util.List;
+import java.util.function.Consumer;
 import net.createballistics.cbc.ActiveBallistics;
 import net.createballistics.cbc.SableCompat;
 import net.createballistics.entity.DroneEntity;
@@ -13,11 +14,12 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
@@ -60,7 +62,7 @@ public class DroneItem extends Item {
             return InteractionResult.PASS;
         }
         Level level = context.getLevel();
-        if (level.isClientSide) {
+        if (level.isClientSide()) {
             return InteractionResult.SUCCESS;
         }
         if (!(level instanceof ServerLevel serverLevel)) {
@@ -78,7 +80,7 @@ public class DroneItem extends Item {
                 ? clickedPos
                 : clickedPos.relative(direction);
 
-        DroneEntity drone = ModEntities.DRONE.get().create(serverLevel);
+        DroneEntity drone = ModEntities.DRONE.get().create(serverLevel, EntitySpawnReason.SPAWN_ITEM_USE);
         if (drone == null) {
             return InteractionResult.CONSUME;
         }
@@ -87,7 +89,7 @@ public class DroneItem extends Item {
         double yOffset = getYOffset(level, spawnPos, offsetYMore, drone.getBoundingBox());
         // ⚠️ 照它：`moveTo(x, y, z)` **不带朝向** ⇒ 朝向恒为默认（yaw 0），
         //    不管从哪个方向放都一样、也不会"放出来先自己转一下"（我们原来传了玩家的 yaw ✗）。
-        drone.moveTo(spawnPos.getX() + 0.5, spawnPos.getY() + yOffset, spawnPos.getZ() + 0.5);
+        drone.snapTo(spawnPos.getX() + 0.5, spawnPos.getY() + yOffset, spawnPos.getZ() + 0.5);
 
         // ⚠️⚠️ 航空学：玩家站在飞艇上时 `spawnPos` 是**图幅坐标** ⇒ 要把它转到**世界坐标**再放出来
         //     （这样无人机一出生就在世界系、落在玩家眼前那格，而不是"先在图幅区出生、
@@ -97,7 +99,7 @@ public class DroneItem extends Item {
         // ⚠️ 不在物理结构上时 `toWorld` 原样返回 ⇒ 地面行为零变化 ✓
         if (ActiveBallistics.sableLoaded()) {
             Vec3 world = SableCompat.toWorld(level, drone.position());
-            drone.moveTo(world.x, world.y, world.z);
+            drone.snapTo(world.x, world.y, world.z);
         }
 
         serverLevel.addFreshEntity(drone);
@@ -126,34 +128,34 @@ public class DroneItem extends Item {
 
     /** 右键水面（准星打在液体上）也能放 —— 照卓越前线的处理。 */
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         BlockHitResult hit = getPlayerPOVHitResult(level, player, ClipContext.Fluid.SOURCE_ONLY);
         if (hit.getType() != HitResult.Type.BLOCK) {
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.PASS;
         }
-        if (level.isClientSide) {
-            return InteractionResultHolder.success(stack);
+        if (level.isClientSide()) {
+            return InteractionResult.SUCCESS;
         }
         if (!(level instanceof ServerLevel serverLevel)
                 || !(level.getBlockState(hit.getBlockPos()).getBlock() instanceof LiquidBlock)
                 || !level.mayInteract(player, hit.getBlockPos())) {
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.PASS;
         }
 
         // 照它：右键水面时**不加 y 偏移**（直接落在水面那一格）
-        DroneEntity drone = ModEntities.DRONE.get().create(serverLevel);
+        DroneEntity drone = ModEntities.DRONE.get().create(serverLevel, EntitySpawnReason.SPAWN_ITEM_USE);
         if (drone == null) {
-            return InteractionResultHolder.consume(stack);
+            return InteractionResult.CONSUME;
         }
         BlockPos pos = hit.getBlockPos();
         // ⚠️ 照它：`moveTo(x, y, z)` **不带朝向** ⇒ 无人机的朝向恒为默认（yaw 0），
         //    不管从哪个方向放都一样、也不会"放出来先自己转一下"。
-        drone.moveTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
+        drone.snapTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
         serverLevel.addFreshEntity(drone);
         consume(player, stack);
         level.gameEvent(player, GameEvent.ENTITY_PLACE, pos);
-        return InteractionResultHolder.consume(stack);
+        return InteractionResult.CONSUME;
     }
 
     /** 消耗一个并报一句（照它的 `stack.shrink(1)` + 我们那句提示）。 */
@@ -161,13 +163,13 @@ public class DroneItem extends Item {
         if (!player.getAbilities().instabuild) {
             stack.shrink(1);
         }
-        player.displayClientMessage(Component.translatable("item.create_ballistics.drone.deployed")
-                .withStyle(ChatFormatting.GREEN), true);
+        player.sendOverlayMessage(Component.translatable("item.create_ballistics.drone.deployed")
+                .withStyle(ChatFormatting.GREEN));
     }
 
     @Override
-    public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip,
-                                TooltipFlag flag) {
+    public void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay display,
+                                Consumer<Component> tooltip, TooltipFlag flag) {
         Tooltips.addLines(tooltip, "item.create_ballistics.drone.help", ChatFormatting.GRAY);
     }
 }

@@ -6,7 +6,6 @@ import net.createballistics.cbc.SableCompat;
 import net.createballistics.item.MonitorItem;
 import net.createballistics.registry.ModItems;
 import net.minecraft.ChatFormatting;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
@@ -20,16 +19,15 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.InterpolationHandler;
 import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
-import software.bernie.geckolib.animatable.GeoAnimatable;
-import software.bernie.geckolib.animatable.instance.AnimatableInstanceCache;
-import software.bernie.geckolib.animation.AnimatableManager;
-import software.bernie.geckolib.util.GeckoLibUtil;
 
 /**
  * 无人机 —— 观测层的「眼睛」。
@@ -53,31 +51,7 @@ import software.bernie.geckolib.util.GeckoLibUtil;
  * 服务端发指令时拿"发包人手上那台监视器"校验 ⇒ 无人机这边不存 UUID，
  * 也就没有"两边各记一份、对不上"这类问题。
  */
-public class DroneEntity extends Entity implements GeoAnimatable {
-
-    /**
-     * GeckoLib 的动画实例缓存 —— 实现 {@link GeoAnimatable} 的样板。
-     *
-     * <p>⚠️ 无人机实体**实现 GeckoLib 的接口**，所以 GeckoLib 是**硬依赖**（见 {@code DroneModel} 的注释）：
-     * 换来的好处是渲染用的就是卓越前线那套（同模型、同渲染器），外观必然一致。
-     */
-    private final AnimatableInstanceCache animatableCache = GeckoLibUtil.createInstanceCache(this);
-
-    @Override
-    public void registerControllers(AnimatableManager.ControllerRegistrar controllers) {
-        // 刻意留空：这份模型没有可用的动画（它动画文件里的骨骼名和模型对不上），
-        // **桨叶自转是在 DroneModel#setCustomAnimations 里每帧手写**的（照卓越前线）。
-    }
-
-    @Override
-    public AnimatableInstanceCache getAnimatableInstanceCache() {
-        return animatableCache;
-    }
-
-    @Override
-    public double getTick(Object entity) {
-        return tickCount;
-    }
+public class DroneEntity extends Entity {
 
     /**
      * 满耐久（点数，不叫"生命值"——它不是生物）。
@@ -180,8 +154,29 @@ public class DroneEntity extends Entity implements GeoAnimatable {
      * <p>⇒ 我们照这个效果做：<b>朝向在 {@code lerpTo} 里直接 set</b>（每 tick 一次，
      * 原版渲染自己会插值），只让**位置**走分步 —— 位置那一路才是"明显变顺"的来源。
      */
+    private final InterpolationHandler interpolation = new InterpolationHandler(this, InterpolationHandler.DEFAULT_INTERPOLATION_STEPS) {
+        @Override
+        public void interpolateTo(Vec3 pos, float yRot, float xRot) {
+            onServerPosePacket(pos.x, pos.y, pos.z, yRot, xRot, InterpolationHandler.DEFAULT_INTERPOLATION_STEPS);
+        }
+
+        @Override
+        public Vec3 position() {
+            return lerpSteps > 0 ? new Vec3(lerpX, lerpY, lerpZ) : DroneEntity.this.position();
+        }
+
+        @Override
+        public boolean hasActiveInterpolation() {
+            return lerpSteps > 0;
+        }
+    };
+
     @Override
-    public void lerpTo(double x, double y, double z, float yRot, float xRot, int steps) {
+    public InterpolationHandler getInterpolation() {
+        return interpolation;
+    }
+
+    private void onServerPosePacket(double x, double y, double z, float yRot, float xRot, int steps) {
         // 朝向：直接落位（照它的效果，见上面的说明）。
         // ⚠️ 例外：**本地玩家正在操控这一台时不要套用包里的朝向** —— 那一路由本地鼠标驱动
         //    （见 predictLookLocal），套用只会把它往回拽一 tick ⇒ 变成"抖"。
@@ -212,24 +207,6 @@ public class DroneEntity extends Entity implements GeoAnimatable {
         this.lerpY = y;
         this.lerpZ = z;
         this.lerpSteps = steps;
-    }
-
-    // 位置目标读数：原版包里"只给朝向不给位置"的那种包会拿它们当前置，
-    // 所以没有待插值目标时返回当前值（照原版语义）。
-
-    @Override
-    public double lerpTargetX() {
-        return this.lerpSteps > 0 ? this.lerpX : this.getX();
-    }
-
-    @Override
-    public double lerpTargetY() {
-        return this.lerpSteps > 0 ? this.lerpY : this.getY();
-    }
-
-    @Override
-    public double lerpTargetZ() {
-        return this.lerpSteps > 0 ? this.lerpZ : this.getZ();
     }
 
     /**
@@ -405,7 +382,7 @@ public class DroneEntity extends Entity implements GeoAnimatable {
     @Override
     public void tick() {
         super.tick();
-        if (level().isClientSide) {
+        if (level().isClientSide()) {
             // 客户端：只做插值（照卓越前线 —— 它客户端**不**跑物理，位置完全跟着包走、由插值抹平）。
             // ⚠️ 我一度在这里加了"本地推进 + hasImpulse"，那是**错的**：既不是它的做法，
             //    而且"本地推进"与"包纠正"会互相打架、产生**有节奏的**抖动（2026-09-23 实测）。
@@ -514,9 +491,9 @@ public class DroneEntity extends Entity implements GeoAnimatable {
                 int dxChunks = Math.abs((getBlockX() >> 4) - (pilot.getBlockX() >> 4));
                 int dzChunks = Math.abs((getBlockZ() >> 4) - (pilot.getBlockZ() >> 4));
                 if (Math.max(dxChunks, dzChunks) >= limitChunks) {
-                    pilot.displayClientMessage(Component.translatable(renderEdgeIsNearer
+                    pilot.sendOverlayMessage(Component.translatable(renderEdgeIsNearer
                             ? "entity.create_ballistics.drone.link_lost_view"
-                            : "entity.create_ballistics.drone.link_lost_sim"), true);
+                            : "entity.create_ballistics.drone.link_lost_sim"));
                     destroy();
                     return;
                 }
@@ -596,13 +573,13 @@ public class DroneEntity extends Entity implements GeoAnimatable {
      * <b>本地玩家正在操控这一台</b>吗（只在客户端有真值）。
      *
      * <p>⚠️⚠️ <b>专用服务器安全</b>：真正的判断在 {@code client/DroneClientAccess}（客户端专属的类，
-     * 服务端永远不会加载它）。这里先过 {@code level().isClientSide} 这道闸 —— <b>它不能省</b>：
+     * 服务端永远不会加载它）。这里先过 {@code level().isClientSide()} 这道闸 —— <b>它不能省</b>：
      * 服务端的分发包里没有 {@code net/minecraft/client/**}，公共类只要在服务端的执行路径上碰到
      * 那些类就会 {@code NoClassDefFoundError}（本模组发布前专门扫过一遍，见
      * {@code tools/scan_client_refs.js}）。
      */
     private boolean pilotedLocally() {
-        if (level() == null || !level().isClientSide) {
+        if (level() == null || !level().isClientSide()) {
             return false;
         }
         return net.createballistics.client.DroneClientAccess.isPilotingLocally(getUUID());
@@ -780,8 +757,8 @@ public class DroneEntity extends Entity implements GeoAnimatable {
     }
 
     @Override
-    public boolean hurt(DamageSource source, float amount) {
-        if (level().isClientSide || isRemoved()) {
+    public boolean hurtServer(ServerLevel level, DamageSource source, float amount) {
+        if (isRemoved()) {
             return false;
         }
         double left = getDurability() - amount;
@@ -932,10 +909,10 @@ public class DroneEntity extends Entity implements GeoAnimatable {
     // ------------------------------------------------------------------
 
     @Override
-    public InteractionResult interact(Player player, InteractionHand hand) {
+    public InteractionResult interact(Player player, InteractionHand hand, Vec3 location) {
         ItemStack stack = player.getItemInHand(hand);
         if (stack.getItem() instanceof MonitorItem monitor) {
-            if (level().isClientSide) {
+            if (level().isClientSide()) {
                 return InteractionResult.SUCCESS;   // 真正的改动全在服务端
             }
             return monitor.toggleLink(player, stack, this)
@@ -943,19 +920,19 @@ public class DroneEntity extends Entity implements GeoAnimatable {
                     : InteractionResult.FAIL;
         }
         if (player.isSecondaryUseActive() && stack.isEmpty()) {
-            if (!level().isClientSide) {
-                player.displayClientMessage(Component.translatable("entity.create_ballistics.drone.recovered")
-                        .withStyle(ChatFormatting.GRAY), true);
+            if (level() instanceof ServerLevel serverLevel) {
+                player.sendOverlayMessage(Component.translatable("entity.create_ballistics.drone.recovered")
+                        .withStyle(ChatFormatting.GRAY));
                 // ⭐ 回收成**掉落物**（照卓越前线：潜行空手右键把无人机收回来，东西不丢）。
                 //    此前这里只有一句提示 + discard()，无人机是**凭空消失**的。
-                spawnAtLocation(new ItemStack(ModItems.DRONE.get()));
+                spawnAtLocation(serverLevel, new ItemStack(ModItems.DRONE.get()));
                 // 收起来了同样要放开遥控器（照卓越前线：回收时把所有绑它的遥控器解绑）
                 forgetMe();
                 discard();
             }
-            return InteractionResult.sidedSuccess(level().isClientSide);
+            return level().isClientSide() ? InteractionResult.SUCCESS : InteractionResult.CONSUME;
         }
-        return super.interact(player, hand);
+        return super.interact(player, hand, location);
     }
 
     // ------------------------------------------------------------------
@@ -963,24 +940,22 @@ public class DroneEntity extends Entity implements GeoAnimatable {
     // ------------------------------------------------------------------
 
     @Override
-    protected void readAdditionalSaveData(CompoundTag tag) {
-        if (tag.contains("Durability")) {
-            setDurability(tag.getDouble("Durability"));
-        }
-        entityData.set(CONTROLLER, tag.getString("Controller"));
-        entityData.set(CONTROLLER_NAME, tag.getString("ControllerName"));
+    protected void readAdditionalSaveData(ValueInput input) {
+        setDurability(input.getDoubleOr("Durability", getDurability()));
+        entityData.set(CONTROLLER, input.getStringOr("Controller", ""));
+        entityData.set(CONTROLLER_NAME, input.getStringOr("ControllerName", ""));
     }
 
     @Override
-    protected void addAdditionalSaveData(CompoundTag tag) {
-        tag.putDouble("Durability", getDurability());
+    protected void addAdditionalSaveData(ValueOutput output) {
+        output.putDouble("Durability", getDurability());
         String controller = getController();
         if (controller != null) {
-            tag.putString("Controller", controller);
+            output.putString("Controller", controller);
         }
         String controllerName = getControllerName();
         if (controllerName != null) {
-            tag.putString("ControllerName", controllerName);
+            output.putString("ControllerName", controllerName);
         }
     }
 }

@@ -27,6 +27,7 @@ import net.createballistics.util.StageText;
 import net.createballistics.util.Texts;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
@@ -192,7 +193,7 @@ public class FireControlComputerBlockEntity extends KineticBlockEntity
     @Override
     public void tick() {
         super.tick();
-        if (level == null || level.isClientSide) {
+        if (level == null || level.isClientSide()) {
             return;
         }
 
@@ -300,7 +301,7 @@ public class FireControlComputerBlockEntity extends KineticBlockEntity
     public void onLoad() {
         super.onLoad();
         // 客户端登记 —— 渲染器靠这份名单找该画哪个框，见 {@link RangeDisplayState}。
-        if (level != null && level.isClientSide) {
+        if (level != null && level.isClientSide()) {
             RangeDisplayState.set(worldPosition, rangeVisible);
         }
     }
@@ -313,7 +314,7 @@ public class FireControlComputerBlockEntity extends KineticBlockEntity
      * 指示器身上的绑定记录不会因为被拒绝而消失，放它进来就会两家互相覆盖目标。
      */
     public void reportIndicator(Player player, @Nullable UUID indicatorId) {
-        if (level == null || level.isClientSide || !isOwner(indicatorId)) {
+        if (level == null || level.isClientSide() || !isOwner(indicatorId)) {
             return;
         }
         lastReport = new IndicatorPresence(level.getGameTime(), Math.sqrt(player.distanceToSqr(
@@ -328,7 +329,7 @@ public class FireControlComputerBlockEntity extends KineticBlockEntity
      * 就<b>没有任何事件会来刷新它</b>，界面上那个距离会一直停在最后一次的值。
      */
     private void refreshIndicatorDisplay() {
-        if (level == null || level.isClientSide) {
+        if (level == null || level.isClientSide()) {
             return;
         }
         boolean fresh = lastReport != null && level.getGameTime() - lastReport.tick() <= REPORT_FRESH_TICKS;
@@ -1166,35 +1167,33 @@ public class FireControlComputerBlockEntity extends KineticBlockEntity
         // 指示器账本不进存档，但这两个显示量要同步给客户端（界面与护目镜都读它）
         // ⚠️ 配对的指示器身份<b>必须进存档</b> —— 它是一对一永久配对，
         //    而"重置"的唯一手段就是拆掉这台计算机（拆了数据就没了，配对自然解除）。
-        if (ownerIndicator != null) {
-            tag.putUUID("OwnerIndicator", ownerIndicator);
-        }
+        tag.storeNullable("OwnerIndicator", UUIDUtil.CODEC, ownerIndicator);
         tag.putDouble("IndicatorDistance", indicatorDistance);
     }
 
     @Override
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
-        minPitch = tag.getDouble("MinPitch");
-        maxPitch = tag.getDouble("MaxPitch");
-        barrelLength = tag.getDouble("BarrelLength");
-        velocityPerCharge = tag.getDouble("VelocityPerCharge");
-        minCharges = Math.max(1, tag.getInt("MinCharges"));
-        maxCharges = Math.max(1, tag.getInt("MaxCharges"));
-        hasTarget = tag.getBoolean("HasTarget");
-        targetX = tag.getDouble("TargetX");
-        targetY = tag.getDouble("TargetY");
-        targetZ = tag.getDouble("TargetZ");
+        minPitch = tag.getDoubleOr("MinPitch", 0.0);
+        maxPitch = tag.getDoubleOr("MaxPitch", 0.0);
+        barrelLength = tag.getDoubleOr("BarrelLength", 0.0);
+        velocityPerCharge = tag.getDoubleOr("VelocityPerCharge", 0.0);
+        minCharges = Math.max(1, tag.getIntOr("MinCharges", 1));
+        maxCharges = Math.max(1, tag.getIntOr("MaxCharges", 1));
+        hasTarget = tag.getBooleanOr("HasTarget", false);
+        targetX = tag.getDoubleOr("TargetX", 0.0);
+        targetY = tag.getDoubleOr("TargetY", 0.0);
+        targetZ = tag.getDoubleOr("TargetZ", 0.0);
 
-        ownerIndicator = tag.hasUUID("OwnerIndicator") ? tag.getUUID("OwnerIndicator") : null;
-        indicatorDistance = tag.contains("IndicatorDistance") ? tag.getDouble("IndicatorDistance") : -1.0;
+        ownerIndicator = tag.read("OwnerIndicator", UUIDUtil.CODEC).orElse(null);
+        indicatorDistance = tag.contains("IndicatorDistance") ? tag.getDoubleOr("IndicatorDistance", -1.0) : -1.0;
 
-        rangeVisible = tag.getBoolean("RangeVisible");
-        arcMode = ArcMode.byName(tag.getString("ArcMode"));
-        fireMode = FireMode.byName(tag.getString("FireMode"));
-        salvoEndTick = tag.getLong("SalvoEndTick");
+        rangeVisible = tag.getBooleanOr("RangeVisible", false);
+        arcMode = ArcMode.byName(tag.getStringOr("ArcMode", ""));
+        fireMode = FireMode.byName(tag.getStringOr("FireMode", ""));
+        salvoEndTick = tag.getLongOr("SalvoEndTick", 0L);
         // 认不出来的档位就退回 1 秒（默认值），别让一个脏数据把间隔变成 0
-        int storedInterval = tag.getInt("RollingInterval");
+        int storedInterval = tag.getIntOr("RollingInterval", 0);
         rollingIntervalTicks = 0;
         for (int v : ROLLING_INTERVALS) {
             if (v == storedInterval) {
@@ -1206,7 +1205,7 @@ public class FireControlComputerBlockEntity extends KineticBlockEntity
             rollingIntervalTicks = 20;
         }
         // 同理：半径也必须是合法档位，认不出来就退回最小档
-        int storedRadius = tag.getInt("CoverageRadius");
+        int storedRadius = tag.getIntOr("CoverageRadius", 0);
         coverageRadius = 0;
         for (int v : COVERAGE_RADII) {
             if (v == storedRadius) {
@@ -1221,15 +1220,15 @@ public class FireControlComputerBlockEntity extends KineticBlockEntity
         // ⚠️ 客户端登记**必须也在这里做一次**。
         // onLoad() 只在区块加载时跑，而扳手切换走的是 toggleRangeVisible() → sendData() → 本方法。
         // 少了这一句，服务端开关切了、客户端的渲染名单却没更新 —— 症状就是"右键完全没反应"。
-        if (level != null && level.isClientSide) {
+        if (level != null && level.isClientSide()) {
             RangeDisplayState.set(worldPosition, rangeVisible);
         }
 
         coordinators.clear();
-        ListTag coords = tag.getList("Coordinators", Tag.TAG_COMPOUND);
+        ListTag coords = tag.getListOrEmpty("Coordinators");
         for (int i = 0; i < coords.size(); i++) {
-            CompoundTag e = coords.getCompound(i);
-            coordinators.add(new BlockPos(e.getInt("X"), e.getInt("Y"), e.getInt("Z")));
+            CompoundTag e = coords.getCompoundOrEmpty(i);
+            coordinators.add(new BlockPos(e.getIntOr("X", 0), e.getIntOr("Y", 0), e.getIntOr("Z", 0)));
         }
 
         if (hasTarget) {

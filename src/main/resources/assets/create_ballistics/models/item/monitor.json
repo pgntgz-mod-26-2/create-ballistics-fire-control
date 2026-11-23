@@ -3,13 +3,5 @@
   "parent": "item/generated",
   "textures": {
     "layer0": "create_ballistics:item/monitor"
-  },
-  "overrides": [
-    {
-      "predicate": {
-        "create_ballistics:linked": 1
-      },
-      "model": "create_ballistics:item/monitor_linked"
-    }
-  ]
+  }
 }

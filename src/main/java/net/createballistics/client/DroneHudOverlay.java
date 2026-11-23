@@ -11,13 +11,13 @@ import net.createballistics.util.Texts;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.LayeredDraw;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.Projectile;
@@ -26,6 +26,7 @@ import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.gui.GuiLayer;
 
 /**
  * 无人机图传的 HUD —— 照卓越前线的 {@code client/overlay/DroneHudOverlay}。
@@ -62,13 +63,13 @@ import net.minecraft.world.phys.Vec3;
  * （这是刻意的架构差别：设置唯一存在计算机上）。客户端手上现成能拿到的只有计算机坐标与它的协调器列表，
  * 炮位本身没有同步到客户端 ⇒ **方案 A（2026-09-23 用户拍板）**：标计算机 + 协调器，不新增同步数据。
  */
-public final class DroneHudOverlay implements LayeredDraw.Layer {
+public final class DroneHudOverlay implements GuiLayer {
 
-    private static final ResourceLocation CROSSHAIR = tex("drone_crosshair");
-    private static final ResourceLocation FOV_BAR = tex("drone_fov");
-    private static final ResourceLocation FOV_MARK = tex("drone_fov_move");
+    private static final Identifier CROSSHAIR = tex("drone_crosshair");
+    private static final Identifier FOV_BAR = tex("drone_fov");
+    private static final Identifier FOV_MARK = tex("drone_fov_move");
     /** 实体框（它那张是 64×64，照它画成 24×24）。 */
-    private static final ResourceLocation ENTITY_FRAME = tex("drone_marker_frame");
+    private static final Identifier ENTITY_FRAME = tex("drone_marker_frame");
     /** 滑块/读数随倍率上移的系数（照它写死的 23.8）。 */
     private static final double ZOOM_SLIDE = 23.8;
 
@@ -90,16 +91,16 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
     private static final double FRAME_RANGE = 256.0;
     private static final double FRAME_ANGLE = 30.0;
 
-    private static ResourceLocation tex(String name) {
+    private static Identifier tex(String name) {
         return CreateBallistics.id("textures/overlay/drone/" + name + ".png");
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, DeltaTracker deltaTracker) {
+    public void render(GuiGraphicsExtractor guiGraphics, DeltaTracker deltaTracker) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         // 开着界面 / 按了 F1 不画（与世界空间那两块同一个规矩）
-        if (player == null || mc.screen != null || mc.options.hideGui) {
+        if (player == null || mc.gui.screen() != null || mc.gui.hud.isHidden()) {
             return;
         }
         if (!MonitorItem.isPiloting(player.getMainHandItem())) {
@@ -124,13 +125,13 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
         //    2026-09-23 用户实机对比后拍板**不抄**，原因见类注释。整段连同贴图一起撤掉了。
 
         // 准星
-        guiGraphics.blit(CROSSHAIR, w / 2 - 16, h / 2 - 16, 0, 0, 32, 32, 32, 32);
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, CROSSHAIR, w / 2 - 16, h / 2 - 16, 0.0F, 0.0F, 32, 32, 32, 32);
 
         // 变焦竖条 + 滑块 + 倍率读数（滑块与读数都随倍率上移）
         int slide = (int) ((zoom - 1.0) * ZOOM_SLIDE);
-        guiGraphics.blit(FOV_BAR, w / 2 + 100, h / 2 - 64, 0, 0, 64, 129, 64, 129);
-        guiGraphics.blit(FOV_MARK, w / 2 + 100, h / 2 - 64 - slide, 0, 0, 64, 129, 64, 129);
-        guiGraphics.drawString(mc.font, Component.literal(Texts.num("%.1f", zoom) + "x"),
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, FOV_BAR, w / 2 + 100, h / 2 - 64, 0.0F, 0.0F, 64, 129, 64, 129);
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, FOV_MARK, w / 2 + 100, h / 2 - 64 - slide, 0.0F, 0.0F, 64, 129, 64, 129);
+        guiGraphics.text(mc.font, Component.literal(Texts.num("%.1f", zoom) + "x"),
                 w / 2 + 144, h / 2 + 56 - slide, 0xFFFFFFFF, false);
 
         // 距离（玩家↔无人机的**水平**距离）
@@ -172,17 +173,17 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
         if (warning != null) {
             // 照它那一句的摆法：**水平居中**（它是拿"宽 36 ⇒ x = 中心 − 18"凑的，
             // 我们这句话长短不一，直接量宽度更稳），行高与它一致（中心上 47）
-            guiGraphics.drawString(mc.font, warning,
+            guiGraphics.text(mc.font, warning,
                     Math.max(0, w / 2 - mc.font.width(warning) / 2), h / 2 - 47, 0xFFFF0000, false);
         }
         Component distanceLine = Component.translatable("gui.create_ballistics.drone.hud.distance",
                 Texts.num("%.1f", distance) + "m");
-        guiGraphics.drawString(mc.font, distanceLine, w / 2 + 10, h / 2 + 33, color, false);
+        guiGraphics.text(mc.font, distanceLine, w / 2 + 10, h / 2 + 33, color, false);
 
         // 耐久（它那行是血量；我们这台是耐久点数，位置与读法照旧）
         Component durabilityLine = Component.translatable("gui.create_ballistics.drone.hud.durability",
                 Texts.num("%.0f", drone.getDurability()), Texts.num("%.0f", DroneEntity.MAX_DURABILITY));
-        guiGraphics.drawString(mc.font, durabilityLine, w / 2 - 77, h / 2 + 33, 0xFFFFFFFF, false);
+        guiGraphics.text(mc.font, durabilityLine, w / 2 - 77, h / 2 + 33, 0xFFFFFFFF, false);
 
         // 计算机的「计算过程」—— 与举镜时右下角那条**同一份实现**（StageText），
         // 玩家在图传里也能看到"炮转好没 / 瞄准完没 / 还有几秒落地"。
@@ -200,7 +201,7 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
         // ——— B3-c-②：测距 + 屏幕标记 ———
 
         // 测距（颜色跟着"过远告警"走，照它）
-        guiGraphics.drawString(mc.font, rangeText(mc, drone), w / 2 + 12, h / 2 - 28, color, false);
+        guiGraphics.text(mc.font, rangeText(mc, drone), w / 2 + 12, h / 2 - 28, color, false);
 
         // 标记的"看不看得见"判据要用**变焦后**的视场角，否则开镜时会把画面外的点也判成可见
         double fov = mc.options.fov().get() / zoom;
@@ -225,7 +226,7 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
      * 「射线 512 格内最近的、过得了过滤器的实体」，**不看有没有墙挡着**。我们照这个语义实现。
      */
     private static Component rangeText(Minecraft mc, DroneEntity drone) {
-        Vec3 camera = mc.gameRenderer.getMainCamera().getPosition();
+        Vec3 camera = mc.gameRenderer.mainCamera().position();
         Vec3 view = drone.getViewVector(1.0F);
         BlockHitResult blockHit = drone.level().clip(new ClipContext(camera,
                 camera.add(view.scale(CrosshairPick.RAY_LENGTH)),
@@ -263,7 +264,7 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
      * 不是"AABB 范围查询"（后者会去遍历包围盒里所有非空实体小节，那才是我们踩过的坑）。
      * 客户端已知的实体本来就有界，所以这是可以每帧跑的。
      */
-    private static void drawEntityFrames(GuiGraphics guiGraphics, DroneEntity drone, float partial) {
+    private static void drawEntityFrames(GuiGraphicsExtractor guiGraphics, DroneEntity drone, float partial) {
         if (!(drone.level() instanceof ClientLevel level)) {
             return;
         }
@@ -303,9 +304,9 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
             if (screen == null) {
                 continue;
             }
-            guiGraphics.blit(ENTITY_FRAME,
+            guiGraphics.blit(RenderPipelines.GUI_TEXTURED, ENTITY_FRAME,
                     (int) Math.round(screen.x) - FRAME_SIZE / 2, (int) Math.round(screen.y) - FRAME_SIZE / 2,
-                    FRAME_SIZE, FRAME_SIZE, 0.0F, 0.0F, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE);
+                    0.0F, 0.0F, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE, FRAME_SIZE);
         }
     }
 
@@ -322,7 +323,7 @@ public final class DroneHudOverlay implements LayeredDraw.Layer {
      *       现在两者同源：都由**服务端镜像**决定，镜像缺席时**一个都不画**。</li>
      * </ol>
      */
-    private static void drawOffhandMarks(GuiGraphics guiGraphics, LocalPlayer player,
+    private static void drawOffhandMarks(GuiGraphicsExtractor guiGraphics, LocalPlayer player,
                                          int screenW, int screenH, double fov) {
         ItemStack off = player.getOffhandItem();
         if (!off.is(ModItems.ARTILLERY_INDICATOR.get())) {

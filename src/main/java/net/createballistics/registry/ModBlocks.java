@@ -1,11 +1,20 @@
 package net.createballistics.registry;
 
+import java.util.function.Consumer;
+import java.util.function.Supplier;
 import net.createballistics.CreateBallistics;
 import net.createballistics.block.FireControlComputerBlock;
 import net.createballistics.block.FireControlCoordinatorBlock;
 import net.createballistics.block.FireControlNodeBlock;
+import net.createballistics.util.Tooltips;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.state.BlockBehaviour;
 import net.minecraft.world.level.material.MapColor;
@@ -38,19 +47,30 @@ public class ModBlocks {
     }
 
     public static final DeferredBlock<FireControlNodeBlock> FIRE_CONTROL_NODE =
-            BLOCKS.register("fire_control_node", () -> new FireControlNodeBlock(metal()));
+            BLOCKS.registerBlock("fire_control_node", FireControlNodeBlock::new, ModBlocks::metal);
     public static final DeferredItem<BlockItem> FIRE_CONTROL_NODE_ITEM =
-            ITEMS.registerSimpleBlockItem("fire_control_node", FIRE_CONTROL_NODE, new Item.Properties().stacksTo(64));
+            helpBlockItem("fire_control_node", FIRE_CONTROL_NODE, "block.create_ballistics.fire_control_node.help");
 
     public static final DeferredBlock<FireControlCoordinatorBlock> FIRE_CONTROL_COORDINATOR =
-            BLOCKS.register("fire_control_coordinator", () -> new FireControlCoordinatorBlock(metal()));
+            BLOCKS.registerBlock("fire_control_coordinator", FireControlCoordinatorBlock::new, ModBlocks::metal);
     public static final DeferredItem<BlockItem> FIRE_CONTROL_COORDINATOR_ITEM =
-            ITEMS.registerSimpleBlockItem("fire_control_coordinator", FIRE_CONTROL_COORDINATOR, new Item.Properties().stacksTo(64));
+            helpBlockItem("fire_control_coordinator", FIRE_CONTROL_COORDINATOR, "block.create_ballistics.fire_control_coordinator.help");
 
     public static final DeferredBlock<FireControlComputerBlock> FIRE_CONTROL_COMPUTER =
-            BLOCKS.register("fire_control_computer", () -> new FireControlComputerBlock(metal()));
+            BLOCKS.registerBlock("fire_control_computer", FireControlComputerBlock::new, ModBlocks::metal);
     public static final DeferredItem<BlockItem> FIRE_CONTROL_COMPUTER_ITEM =
-            ITEMS.registerSimpleBlockItem("fire_control_computer", FIRE_CONTROL_COMPUTER, new Item.Properties().stacksTo(64));
+            helpBlockItem("fire_control_computer", FIRE_CONTROL_COMPUTER, "block.create_ballistics.fire_control_computer.help");
+
+    private static DeferredItem<BlockItem> helpBlockItem(String name, Supplier<? extends Block> block, String helpKey) {
+        return ITEMS.registerItem(name, props -> new BlockItem(block.get(), props.useBlockDescriptionPrefix().stacksTo(64)) {
+            @Override
+            public void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay tooltipDisplay,
+                                        Consumer<Component> tooltip, TooltipFlag flag) {
+                super.appendHoverText(stack, context, tooltipDisplay, tooltip, flag);
+                Tooltips.addLines(tooltip, helpKey, ChatFormatting.GRAY);
+            }
+        });
+    }
 
     public static void register(IEventBus eventBus) {
         BLOCKS.register(eventBus);

@@ -56,17 +56,14 @@ public final class WorldToScreen {
      * </ol>
      */
     @SubscribeEvent
-    public static void onRenderStage(RenderLevelStageEvent event) {
-        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_WEATHER) {
-            return;
-        }
+    public static void onRenderStage(RenderLevelStageEvent.AfterWeather event) {
         MODEL_VIEW.set(event.getModelViewMatrix());
-        PROJECTION.set(event.getProjectionMatrix());
+        PROJECTION.set(event.getLevelRenderState().cameraRenderState.projectionMatrix);
         captured = true;
     }
 
     /**
-     * 世界坐标 → 屏幕坐标（GUI 缩放后的坐标系，与 {@code GuiGraphics} 同一套）。
+     * 世界坐标 → 屏幕坐标（GUI 缩放后的坐标系，与 {@code GuiGraphicsExtractor} 同一套）。
      *
      * @return 屏幕坐标（z 是相机空间深度，<b>负数表示在相机背后</b>）；矩阵还没抓到过则返回 {@code null}
      */
@@ -74,8 +71,8 @@ public final class WorldToScreen {
         if (!captured) {
             return null;
         }
-        Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
-        Vec3 relativeToCamera = camera.getPosition().vectorTo(world);
+        Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
+        Vec3 relativeToCamera = camera.position().vectorTo(world);
 
         Vector4f p = new Vector4f((float) relativeToCamera.x, (float) relativeToCamera.y,
                 (float) relativeToCamera.z, 1.0F);
@@ -103,12 +100,13 @@ public final class WorldToScreen {
      * 调用方用 {@code mc.options.fov() / 当前倍率} 算即可。
      */
     public static boolean canSee(Vec3 world, double fovDegrees) {
-        Camera camera = Minecraft.getInstance().gameRenderer.getMainCamera();
-        Vec3 toPoint = camera.getPosition().vectorTo(world);
+        Camera camera = Minecraft.getInstance().gameRenderer.mainCamera();
+        Vec3 toPoint = camera.position().vectorTo(world);
         if (toPoint.lengthSqr() < 1.0E-6) {
             return true;   // 就在相机位置上，算看得见
         }
-        double cos = toPoint.normalize().dot(new Vec3(camera.getLookVector()));
+        var fwd = camera.forwardVector();
+        double cos = toPoint.normalize().dot(new Vec3(fwd.x(), fwd.y(), fwd.z()));
         double degrees = Math.toDegrees(Math.acos(Mth.clamp(cos, -1.0, 1.0)));
         return degrees < fovDegrees;
     }

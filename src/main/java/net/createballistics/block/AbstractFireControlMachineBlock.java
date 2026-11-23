@@ -11,7 +11,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
@@ -67,10 +66,10 @@ public abstract class AbstractFireControlMachineBlock<T extends KineticBlockEnti
     public InteractionResult onWrenched(BlockState state, UseOnContext context) {
         Level level = context.getLevel();
         if (level.getBlockEntity(context.getClickedPos()) instanceof RangeDisplayToggle toggle) {
-            if (!level.isClientSide) {
+            if (!level.isClientSide()) {
                 toggle.toggleRangeVisible();
             }
-            return InteractionResult.sidedSuccess(level.isClientSide);
+            return InteractionResult.SUCCESS;
         }
         return InteractionResult.PASS;
     }
@@ -78,19 +77,12 @@ public abstract class AbstractFireControlMachineBlock<T extends KineticBlockEnti
     /** 空手右键打开的界面。两个方块各开各的（见各自的 Screen）。 */
     protected abstract InteractionResult openScreen(Level level, BlockPos pos);
 
-    /**
-     * ⚠️ 必须在<b>方块这一层</b>就把扳手分派掉，不能只靠 {@link #onWrenched}。
-     *
-     * <p>原因：{@code useWithoutItem} 会打开界面并返回 {@code SUCCESS}，右键<b>当场就被消费掉了</b>，
-     * Create 扳手那条路（{@code WrenchItem.useOn} → {@code IWrenchable.onWrenched}）
-     * 根本轮不到执行。症状是"拿着扳手右键，界面照开，范围纹丝不动"（2026-09-19 用户实测）。
-     */
     @Override
-    protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
-                                              Player player, InteractionHand hand, BlockHitResult hit) {
+    protected InteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+                                          Player player, InteractionHand hand, BlockHitResult hit) {
         if (holdingWrench(player)) {
             toggleRange(level, pos);
-            return ItemInteractionResult.sidedSuccess(level.isClientSide);
+            return InteractionResult.SUCCESS;
         }
         return super.useItemOn(stack, state, level, pos, player, hand, hit);
     }
@@ -100,7 +92,7 @@ public abstract class AbstractFireControlMachineBlock<T extends KineticBlockEnti
                                                Player player, BlockHitResult hit) {
         if (holdingWrench(player)) {
             toggleRange(level, pos);
-            return InteractionResult.sidedSuccess(level.isClientSide);
+            return InteractionResult.SUCCESS;
         }
         return openScreen(level, pos);
     }
@@ -113,7 +105,7 @@ public abstract class AbstractFireControlMachineBlock<T extends KineticBlockEnti
 
     /** 切换范围显示，<b>并且不打开界面</b>。 */
     private static void toggleRange(Level level, BlockPos pos) {
-        if (!level.isClientSide && level.getBlockEntity(pos) instanceof RangeDisplayToggle toggle) {
+        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof RangeDisplayToggle toggle) {
             toggle.toggleRangeVisible();
         }
     }

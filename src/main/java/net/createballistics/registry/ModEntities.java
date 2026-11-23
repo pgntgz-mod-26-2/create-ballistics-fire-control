@@ -3,6 +3,7 @@ package net.createballistics.registry;
 import net.createballistics.CreateBallistics;
 import net.createballistics.entity.DroneEntity;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.neoforged.bus.api.IEventBus;
@@ -28,7 +29,7 @@ public class ModEntities {
                     // —— 追踪范围给足 512 格（32 区块）：图传要在客户端拿得到它，而且它常常飞离玩家。
                     .clientTrackingRange(32)
                     .updateInterval(1)           // 每 tick 同步（照它；飞行的东西不能 3 tick 一跳）
-                    .build("drone"));
+                    .build(ResourceKey.create(Registries.ENTITY_TYPE, CreateBallistics.id("drone"))));
 
     public static void register(IEventBus eventBus) {
         ENTITIES.register(eventBus);

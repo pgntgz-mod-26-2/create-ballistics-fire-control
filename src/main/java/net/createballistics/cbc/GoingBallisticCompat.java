@@ -3,7 +3,7 @@ package net.createballistics.cbc;
 import net.createballistics.ballistic.ExternalBallistics;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -107,7 +107,7 @@ public final class GoingBallisticCompat {
             if (extracted == null || extracted.isEmpty()) {
                 return null;
             }
-            ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(extracted.getItem());
+            Identifier itemId = BuiltInRegistries.ITEM.getKey(extracted.getItem());
             PropellantProperties props = PropellantRegistry.get(extracted, registries)
                     .or(() -> PropellantRegistry.get(itemId))
                     .orElse(null);

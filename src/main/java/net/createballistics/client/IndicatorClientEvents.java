@@ -22,7 +22,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.ViewportEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 /**
  * 火炮指示器的客户端行为：<b>开镜变焦</b>、<b>滚轮调焦</b>、<b>左键蓄力开火</b>。
@@ -193,7 +193,7 @@ public final class IndicatorClientEvents {
         if (target == null) {
             return;
         }
-        PacketDistributor.sendToServer(new ComputerActionC2SPacket(computer,
+        ClientPacketDistributor.sendToServer(new ComputerActionC2SPacket(computer,
                 ComputerActionC2SPacket.FIELD_INDICATOR_TARGET, 0, target.x, target.y, target.z));
     }
 
@@ -310,13 +310,14 @@ public final class IndicatorClientEvents {
         //     ⇒ 直接拿它的返回值当基准 = 70 × 0.1 = 7 ⇒ 再 ÷ 设计倍率 2.0 ⇒ FOV≈3.5°
         //     （用户逐帧实测 **3.4°** ✓，等于 23× 放大）。
         //     ⇒ 只在返回值"不像开镜值"时更新缓存，开镜期间用上一次的干净值。
-        final float rawFovModifier = player == null ? 1.0F : player.getFieldOfViewModifier();
+        final float rawFovModifier = player == null ? 1.0F
+                : player.getFieldOfViewModifier(true, mc.options.fovEffectScale().get().floatValue());
         if (rawFovModifier > 0.11F) {
             lastCleanFovModifier = rawFovModifier;
         }
-        final boolean configuredFov = event.usedConfiguredFov();
         final double incomingFov = event.getFOV();
-        final double baseFov = configuredFov ? optionFov * lastCleanFovModifier : incomingFov;
+        final boolean hijackedWorldFov = rawFovModifier <= 0.11F && incomingFov < 30.0;
+        final double baseFov = hijackedWorldFov ? optionFov * lastCleanFovModifier : incomingFov;
 
         if (!takeOver) {
             return;
@@ -330,7 +331,7 @@ public final class IndicatorClientEvents {
         // 真相：哨戒动力臂那个 `SpyglassZoomMixin` 把"任何用望远镜姿势的物品"都判成
         // `isScoping()=true`，而那 0.1 是在**事件之前**就乘进基准里了（日志里那个 7.70 = 77×0.1）
         // ⇒ 我们**忽略入参、从选项值重算**，本来就已经绕开了它 ⇒ 再乘 10 就是纯多余。
-        event.setFOV(out);
+        event.setFOV((float) out);
     }
 
     // ⚠️ 这里**曾经有一个** `@SubscribeEvent(priority = LOWEST)` 的探针（2026-09-27 加、同日删）：
@@ -450,12 +451,12 @@ public final class IndicatorClientEvents {
         while (ModKeyMappings.OPEN_INDICATOR.consumeClick()) {
             openRequested = true;
         }
-        if (openRequested && player != null && mc.screen == null && holdingIndicator(player)) {
+        if (openRequested && player != null && mc.gui.screen() == null && holdingIndicator(player)) {
             if (ArtilleryIndicatorItem.boundComputer(player.getMainHandItem()) == null) {
-                player.displayClientMessage(Component.translatable(
-                        "item.create_ballistics.artillery_indicator.unbound"), true);
+                player.sendOverlayMessage(Component.translatable(
+                        "item.create_ballistics.artillery_indicator.unbound"));
             }
-            mc.setScreen(new ArtilleryIndicatorScreen());
+            mc.setScreenAndShow(new ArtilleryIndicatorScreen());
         }
 
         if (fireCooldown > 0) {
@@ -519,7 +520,7 @@ public final class IndicatorClientEvents {
         // ⚠️ 用**指示器专用**的开火字段，不用界面的 FIELD_FIRE_ALL ——
         //    归属检查（"这台计算机是不是归你这台指示器"）只能加在专用字段上，
         //    加在公用字段上会把"站在计算机前按界面"的人也拦掉（2026-09-22 踩过）。
-        PacketDistributor.sendToServer(new ComputerActionC2SPacket(
+        ClientPacketDistributor.sendToServer(new ComputerActionC2SPacket(
                 computer, ComputerActionC2SPacket.FIELD_INDICATOR_FIRE, 0, 0, 0, 0));
     }
 

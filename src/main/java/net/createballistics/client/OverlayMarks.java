@@ -3,9 +3,10 @@ package net.createballistics.client;
 import java.util.List;
 import net.createballistics.CreateBallistics;
 import net.createballistics.item.ArtilleryIndicatorItem;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
@@ -30,9 +31,9 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class OverlayMarks {
 
-    private static final ResourceLocation TARGET =
+    private static final Identifier TARGET =
             CreateBallistics.id("textures/overlay/spyglass/indicator.png");
-    private static final ResourceLocation IFF_FIREPOWER =
+    private static final Identifier IFF_FIREPOWER =
             CreateBallistics.id("textures/overlay/drone/drone_iff_artillery.png");
 
     /** 画多大（屏幕像素）。与卓越前线一致。 */
@@ -48,7 +49,7 @@ public final class OverlayMarks {
      * （{@code new Vec3(x, y, z)}），但在自家的望远镜迭加层里用的是 {@code getCenter()} ——
      * 同一个"打击目标点"由我们两个界面同时标着，取中心才不会出现两个界面差半格。
      */
-    public static void target(GuiGraphics guiGraphics, Vec3 world, int screenW, int screenH, double fov) {
+    public static void target(GuiGraphicsExtractor guiGraphics, Vec3 world, int screenW, int screenH, double fov) {
         mark(guiGraphics, TARGET, world, screenW, screenH, fov);
     }
 
@@ -63,7 +64,7 @@ public final class OverlayMarks {
      * {@code getBlockEntity} 读不到，镜像就被删掉（见 {@code ArtilleryIndicatorItem#inventoryTick}）——
      * 客户端于是不再对着空气画一个友军图标。
      */
-    public static void friendlies(GuiGraphics guiGraphics, ItemStack indicator,
+    public static void friendlies(GuiGraphicsExtractor guiGraphics, ItemStack indicator,
                                   int screenW, int screenH, double fov) {
         List<BlockPos> coordinators = ArtilleryIndicatorItem.mirroredCoordinators(indicator);
         if (coordinators == null) {
@@ -79,7 +80,7 @@ public final class OverlayMarks {
     }
 
     /** 一个 12×12 的图标：看不见就不画，看得见就夹在屏幕内。 */
-    private static void mark(GuiGraphics guiGraphics, ResourceLocation icon, Vec3 world,
+    private static void mark(GuiGraphicsExtractor guiGraphics, Identifier icon, Vec3 world,
                              int screenW, int screenH, double fov) {
         if (!WorldToScreen.canSee(world, fov)) {
             return;
@@ -90,6 +91,6 @@ public final class OverlayMarks {
         }
         int x = Mth.clamp((int) Math.round(screen.x) - SIZE / 2, 0, screenW - SIZE);
         int y = Mth.clamp((int) Math.round(screen.y) - SIZE / 2, 0, screenH - SIZE);
-        guiGraphics.blit(icon, x, y, SIZE, SIZE, 0.0F, 0.0F, SIZE, SIZE, SIZE, SIZE);
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, icon, x, y, 0.0F, 0.0F, SIZE, SIZE, SIZE, SIZE, SIZE, SIZE);
     }
 }

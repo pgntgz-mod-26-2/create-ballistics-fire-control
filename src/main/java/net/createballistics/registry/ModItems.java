@@ -22,19 +22,19 @@ public class ModItems {
 
     /** 火炮指示器：望远镜 / 绑定器 / 之后的配置与开火。一台指示器只绑一台计算机，所以不可堆叠。 */
     public static final DeferredItem<ArtilleryIndicatorItem> ARTILLERY_INDICATOR =
-            ITEMS.register("artillery_indicator", () -> new ArtilleryIndicatorItem(
-                    new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+            ITEMS.registerItem("artillery_indicator", props -> new ArtilleryIndicatorItem(
+                    props.stacksTo(1).rarity(Rarity.UNCOMMON)));
 
     /** 无人机（物品形态）：潜行右键方块放出来，**消耗一个**（会撞坏，是消耗品）。 */
     // ⚠️ 2026-09-24：**可堆叠到 64**（用户定：只有「火炮指示器」和「无人机遥控器」不可堆叠，
     //    其余一律 64）。原来是 16，没有理由，改掉。
     public static final DeferredItem<DroneItem> DRONE =
-            ITEMS.register("drone", () -> new DroneItem(new Item.Properties().stacksTo(64)));
+            ITEMS.registerItem("drone", props -> new DroneItem(props.stacksTo(64)));
 
     /** 无人机监视器：遥控 + 图传。一台只绑一台无人机，所以不可堆叠。 */
     public static final DeferredItem<MonitorItem> MONITOR =
-            ITEMS.register("monitor", () -> new MonitorItem(
-                    new Item.Properties().stacksTo(1).rarity(Rarity.UNCOMMON)));
+            ITEMS.registerItem("monitor", props -> new MonitorItem(
+                    props.stacksTo(1).rarity(Rarity.UNCOMMON)));
 
     // 注：这里曾经还有 5 个"渲染专用的隐藏物品"（机身 + 四片桨叶），
     // 那是早期"把 Bedrock 模型转成原版模型、借原版 ItemRenderer 画"方案的产物。

@@ -8,16 +8,18 @@ import net.createballistics.client.ModKeyMappings;
 import net.createballistics.item.ArtilleryIndicatorItem;
 import net.createballistics.net.ComputerActionC2SPacket;
 import net.createballistics.registry.ModItems;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -40,7 +42,7 @@ import org.jetbrains.annotations.Nullable;
 @OnlyIn(Dist.CLIENT)
 public class ArtilleryIndicatorScreen extends Screen {
 
-    private static final ResourceLocation PANEL = CreateBallistics.id("textures/gui/indicator.png");
+    private static final Identifier PANEL = CreateBallistics.id("textures/gui/indicator.png");
     /** 贴图总尺寸（面板与右侧那些小块都在这张图里）。 */
     private static final int TEX = 256;
     private static final int W = 176;
@@ -162,7 +164,7 @@ public class ArtilleryIndicatorScreen extends Screen {
     private void send(byte field) {
         BlockPos computer = computer();
         if (computer != null) {
-            PacketDistributor.sendToServer(new ComputerActionC2SPacket(computer, field, 0, 0, 0, 0));
+            ClientPacketDistributor.sendToServer(new ComputerActionC2SPacket(computer, field, 0, 0, 0, 0));
         }
     }
 
@@ -214,24 +216,24 @@ public class ArtilleryIndicatorScreen extends Screen {
     // ------------------------------------------------------------------
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         refreshButtons();
 
-        // 世界先糊一层，面板才看得清（但<b>不要</b>原版那层压暗的菜单底，见 renderBackground）
-        renderBlurredBackground(partialTick);
+        // 世界先糊一层，面板才看得清（但<b>不要</b>原版那层压暗的菜单底，见 extractBackground）
+        extractBlurredBackground(graphics);
 
         // 顺序要紧：面板是不透明的，必须先铺底、再画按钮（否则按钮会被盖住）
-        graphics.blit(PANEL, leftPos, topPos, 0.0F, 0.0F, W, H, TEX, TEX);
-        graphics.drawString(font, title, leftPos + 6, topPos + 6, TITLE_COLOR, false);
+        graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL, leftPos, topPos, 0.0F, 0.0F, W, H, TEX, TEX);
+        graphics.text(font, title, leftPos + 6, topPos + 6, TITLE_COLOR, false);
 
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
         drawChart(graphics, mouseX, mouseY);
 
         // ⚠️ 没绑计算机时**必须把原因写出来**：三颗按钮这时是禁用的、点不动，
         //    只把字压暗的话玩家只会觉得"按钮坏了"（2026-09-22 用户实测反馈）。
         if (!isBound()) {
-            graphics.drawCenteredString(font,
+            graphics.centeredText(font,
                     Component.translatable("item.create_ballistics.artillery_indicator.unbound"),
                     leftPos + W / 2, topPos + H + 6, 0xFFFF5555);
         }
@@ -262,8 +264,8 @@ public class ArtilleryIndicatorScreen extends Screen {
     }
 
     /** 画一行不带阴影的居中文字（面板上的文字都要用这个，理由见按钮里那条注释）。 */
-    private void drawNoShadowCentered(GuiGraphics graphics, Component text, int centerX, int y, int color) {
-        graphics.drawString(font, text, centerX - font.width(text) / 2, y, color, false);
+    private void drawNoShadowCentered(GuiGraphicsExtractor graphics, Component text, int centerX, int y, int color) {
+        graphics.text(font, text, centerX - font.width(text) / 2, y, color, false);
     }
 
     /**
@@ -275,10 +277,10 @@ public class ArtilleryIndicatorScreen extends Screen {
      *   <li>面板是在 {@code super.render} <b>之前</b>铺的 ⇒ 那层深色底会盖在面板上，把它压暗；</li>
      *   <li>模糊是<b>就地糊整个帧缓冲</b>的 ⇒ 再糊一次会把面板和按钮一起糊花。</li>
      * </ol>
-     * 所以模糊由 {@link #render} 自己在铺面板<b>之前</b>手动做一次，这里什么都不做。
+     * 所以模糊由 {@link #extractRenderState} 自己在铺面板<b>之前</b>手动做一次，这里什么都不做。
      */
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
 
     /**
@@ -287,14 +289,16 @@ public class ArtilleryIndicatorScreen extends Screen {
      * <p>画哪张完全跟着弹道模式走：低伸→低伸图、高抛→高抛图、<b>自动→不画</b>
      * （面板贴图上那块黑框本来就是黑的，不画就是空的）。
      */
-    private void drawChart(GuiGraphics graphics, int mouseX, int mouseY) {
+    private void drawChart(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         ArcMode mode = arcMode();
         if (mode == ArcMode.FLAT) {
-            graphics.blit(PANEL, leftPos + CHART_X, topPos + CHART_Y + (CHART_HIGH_H - CHART_FLAT_H),
-                    CHART_W, CHART_FLAT_H, CHART_U, CHART_V_FLAT, CHART_W, CHART_FLAT_H, TEX, TEX);
+            graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL,
+                    leftPos + CHART_X, topPos + CHART_Y + (CHART_HIGH_H - CHART_FLAT_H),
+                    (float) CHART_U, (float) CHART_V_FLAT, CHART_W, CHART_FLAT_H, CHART_W, CHART_FLAT_H, TEX, TEX);
         } else if (mode == ArcMode.HIGH) {
-            graphics.blit(PANEL, leftPos + CHART_X, topPos + CHART_Y, CHART_W, CHART_HIGH_H,
-                    CHART_U, CHART_V_HIGH, CHART_W, CHART_HIGH_H, TEX, TEX);
+            graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL,
+                    leftPos + CHART_X, topPos + CHART_Y,
+                    (float) CHART_U, (float) CHART_V_HIGH, CHART_W, CHART_HIGH_H, CHART_W, CHART_HIGH_H, TEX, TEX);
         } else {
             return;   // 自动：留黑
         }
@@ -302,19 +306,19 @@ public class ArtilleryIndicatorScreen extends Screen {
         // 悬停提示（照卓越前线）：告诉玩家这张图是哪条弹道
         if (mouseX >= leftPos + CHART_X && mouseX <= leftPos + CHART_X + CHART_W
                 && mouseY >= topPos + CHART_Y && mouseY <= topPos + CHART_Y + CHART_HOVER_H) {
-            graphics.renderTooltip(font, Component.translatable(mode == ArcMode.FLAT
+            graphics.setTooltipForNextFrame(font, Component.translatable(mode == ArcMode.FLAT
                     ? "gui.create_ballistics.chart.flat" : "gui.create_ballistics.chart.high"), mouseX, mouseY);
         }
     }
 
     /** H 键再按一次就关掉（和开关一个界面一样）。 */
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (ModKeyMappings.OPEN_INDICATOR.matches(keyCode, scanCode)) {
+    public boolean keyPressed(KeyEvent event) {
+        if (ModKeyMappings.OPEN_INDICATOR.matches(event)) {
             onClose();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     /** 遥控器界面，不该把世界暂停下来（和火控计算机界面一致）。 */
@@ -336,10 +340,11 @@ public class ArtilleryIndicatorScreen extends Screen {
         }
 
         @Override
-        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
             boolean hot = active && isHoveredOrFocused();
-            graphics.blit(PANEL, getX(), getY(), getWidth(), getHeight(),
-                    BTN_U, hot ? WELL_TEX_V_HOVER : WELL_TEX_V, BTN_TEX_W, BTN_TEX_H, TEX, TEX);
+            graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL, getX(), getY(),
+                    (float) BTN_U, (float) (hot ? WELL_TEX_V_HOVER : WELL_TEX_V),
+                    getWidth(), getHeight(), BTN_TEX_W, BTN_TEX_H, TEX, TEX);
             // ⚠️ 最后那个 false = **不画阴影**。`drawCenteredString` 默认是带阴影的，
             //    那样按钮上的字和左上角标题（不带阴影）看起来是两种字体（2026-09-22 用户指出）。
             // ⚠️ 按钮井只有 {@code WELL_W = 80} 像素，而「火力模式：同时弹着」有 10 个汉字
@@ -347,11 +352,11 @@ public class ArtilleryIndicatorScreen extends Screen {
             //    整句缩到 {@link #LABEL_SCALE}，最长的标签也放得下（90 × 0.8 = 72 < 80）。
             //    ⚠️ 缩放绕**原点**进行，所以要先平移到文字该在的位置再 scale。
             var pose = graphics.pose();
-            pose.pushPose();
-            pose.translate(getX() + getWidth() / 2.0F, getY() + (getHeight() - 8) / 2.0F + 1.0F, 0.0F);
-            pose.scale(LABEL_SCALE, LABEL_SCALE, 1.0F);
+            pose.pushMatrix();
+            pose.translate(getX() + getWidth() / 2.0F, getY() + (getHeight() - 8) / 2.0F + 1.0F);
+            pose.scale(LABEL_SCALE, LABEL_SCALE);
             drawNoShadowCentered(graphics, getMessage(), 0, 0, active ? LABEL_COLOR : LABEL_DISABLED);
-            pose.popPose();
+            pose.popMatrix();
         }
     }
 
@@ -364,9 +369,10 @@ public class ArtilleryIndicatorScreen extends Screen {
         }
 
         @Override
-        protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-            graphics.blit(PANEL, getX(), getY(), getWidth(), getHeight(),
-                    BTN_U, isHoveredOrFocused() ? DONE_V_HOVER : DONE_V, BTN_TEX_W, BTN_TEX_H, TEX, TEX);
+        protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+            graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL, getX(), getY(),
+                    (float) BTN_U, (float) (isHoveredOrFocused() ? DONE_V_HOVER : DONE_V),
+                    getWidth(), getHeight(), BTN_TEX_W, BTN_TEX_H, TEX, TEX);
         }
     }
 }

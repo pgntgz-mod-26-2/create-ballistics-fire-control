@@ -2,6 +2,7 @@
   "itemGroup.create_ballistics": "机械动力火炮：火控计算弹道学",
 
   "key.categories.create_ballistics": "机械动力火炮：火控计算弹道学",
+  "key.categories.create_ballistics.main": "机械动力：弹道火控",
   "key.create_ballistics.open_indicator": "打开火炮指示器界面",
   "key.create_ballistics.move_forward": "无人机：前进",
   "key.create_ballistics.move_back": "无人机：后退",

@@ -7,7 +7,7 @@ import net.createballistics.registry.ModDataComponents;
 import net.createballistics.registry.ModEntities;
 import net.createballistics.registry.ModItems;
 import net.createballistics.registry.ModSounds;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -42,7 +42,7 @@ public class CreateBallistics {
         ModCreativeTabs.register(modEventBus);
     }
 
-    public static ResourceLocation id(String path) {
-        return ResourceLocation.fromNamespaceAndPath(MODID, path);
+    public static Identifier id(String path) {
+        return Identifier.fromNamespaceAndPath(MODID, path);
     }
 }

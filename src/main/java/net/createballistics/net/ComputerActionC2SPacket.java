@@ -98,8 +98,8 @@ public record ComputerActionC2SPacket(BlockPos pos, byte field, double value,
                 // 指示器可以在很远处下指令，那条路靠的是"计算机那块区块加载着"
                 // （服务端不受客户端视距限制，但区块没加载就真读不到方块实体）。
                 // ⇒ 送不到就**直说**，别让玩家以为"按了没反应"是按钮坏了。
-                player.displayClientMessage(Component.translatable(
-                        "gui.create_ballistics.computer_unloaded"), true);
+                player.sendOverlayMessage(Component.translatable(
+                        "gui.create_ballistics.computer_unloaded"));
                 return;
             }
             try {
@@ -112,8 +112,8 @@ public record ComputerActionC2SPacket(BlockPos pos, byte field, double value,
                 //    （根因是 readyNodes() 返回不可变列表、轮射对它 sort）。
                 //    ⇒ 让它**在游戏里也说出来**，别再让玩家对着一个静默失败猜。
                 CreateBallistics.LOGGER.error("[火控] 处理指令出错（field={}）", payload.field, e);
-                player.displayClientMessage(Component.translatable(
-                        "gui.create_ballistics.command_error").withStyle(ChatFormatting.RED), true);
+                player.sendOverlayMessage(Component.translatable(
+                        "gui.create_ballistics.command_error").withStyle(ChatFormatting.RED));
             }
         });
     }
@@ -179,7 +179,7 @@ public record ComputerActionC2SPacket(BlockPos pos, byte field, double value,
      */
     private static void reportIfFailed(Player player, @Nullable String reason) {
         if (reason != null) {
-            player.displayClientMessage(Component.translatable(reason).withStyle(ChatFormatting.RED), true);
+            player.sendOverlayMessage(Component.translatable(reason).withStyle(ChatFormatting.RED));
         }
     }
 
@@ -206,10 +206,10 @@ public record ComputerActionC2SPacket(BlockPos pos, byte field, double value,
         if (!indicator.isEmpty() && computer.isOwner(ArtilleryIndicatorItem.indicatorId(indicator))) {
             return false;
         }
-        player.displayClientMessage(Component.translatable(computer.hasIndicator()
+        player.sendOverlayMessage(Component.translatable(computer.hasIndicator()
                         ? "item.create_ballistics.artillery_indicator.taken"
                         : "item.create_ballistics.artillery_indicator.not_bound")
-                .withStyle(ChatFormatting.RED), true);
+                .withStyle(ChatFormatting.RED));
         return true;
     }
 
@@ -235,9 +235,9 @@ public record ComputerActionC2SPacket(BlockPos pos, byte field, double value,
         // 客户端那份乐观播放会在"没绑计算机 / 没打到方块"时也响，那是骗人。
         player.level().playSound(null, player.blockPosition(), ModSounds.CANNON_ZOOM_IN.get(),
                 SoundSource.PLAYERS, 1.0F, 1.0F);
-        player.displayClientMessage(Component.translatable(
+        player.sendOverlayMessage(Component.translatable(
                         "item.create_ballistics.artillery_indicator.mark",
                         marked.getX(), marked.getY(), marked.getZ())
-                .withStyle(ChatFormatting.GREEN), true);
+                .withStyle(ChatFormatting.GREEN));
     }
 }

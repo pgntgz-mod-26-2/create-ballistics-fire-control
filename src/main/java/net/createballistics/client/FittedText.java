@@ -1,7 +1,7 @@
 package net.createballistics.client;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -42,7 +42,7 @@ public final class FittedText {
      * @param minLeft       左端下限（一般给 8 像素边距）
      * @param scale         额外缩放（调用方自己的文字缩放，通常是 1.0）
      */
-    public static void fitRight(GuiGraphics guiGraphics, Component text, int preferredLeft,
+    public static void fitRight(GuiGraphicsExtractor guiGraphics, Component text, int preferredLeft,
                                 int right, int minLeft, int y, int color, boolean shadow, float scale) {
         var font = Minecraft.getInstance().font;
         int width = font.width(text);
@@ -54,20 +54,20 @@ public final class FittedText {
         }
         float total = scale * fit;
         if (total >= 0.999F) {
-            guiGraphics.drawString(font, text, left, y, color, shadow);
+            guiGraphics.text(font, text, left, y, color, shadow);
             return;
         }
         // ⚠️ 缩放绕**原点**进行，所以必须先平移到起点，否则会缩放"屏幕左上角"那个距离
         var pose = guiGraphics.pose();
-        pose.pushPose();
-        pose.translate(left, y, 0.0F);
-        pose.scale(total, total, 1.0F);
-        guiGraphics.drawString(font, text, 0, 0, color, shadow);
-        pose.popPose();
+        pose.pushMatrix();
+        pose.translate(left, y);
+        pose.scale(total, total);
+        guiGraphics.text(font, text, 0, 0, color, shadow);
+        pose.popMatrix();
     }
 
     /** 同上，不额外缩放（{@code scale = 1}）。 */
-    public static void fitRight(GuiGraphics guiGraphics, Component text, int preferredLeft,
+    public static void fitRight(GuiGraphicsExtractor guiGraphics, Component text, int preferredLeft,
                                 int right, int minLeft, int y, int color, boolean shadow) {
         fitRight(guiGraphics, text, preferredLeft, right, minLeft, y, color, shadow, 1.0F);
     }
@@ -79,22 +79,22 @@ public final class FittedText {
      * <p>给"面板上的一句话提示"用（例如指示器 H 键面板底部那句）—— 那句话是要**居中**摆的，
      * 而 {@link #fitRight} 是"右端钉死"，两者不通用。
      */
-    public static void fitCentered(GuiGraphics guiGraphics, Component text, int centerX, int y,
+    public static void fitCentered(GuiGraphicsExtractor guiGraphics, Component text, int centerX, int y,
                                    int maxWidth, int color, boolean shadow, float scale) {
         var font = Minecraft.getInstance().font;
         int width = font.width(text);
         float fit = width > maxWidth ? Math.max(MIN_SCALE, (float) maxWidth / width) : 1.0F;
         float total = scale * fit;
         if (total >= 0.999F) {
-            guiGraphics.drawString(font, text, centerX - width / 2, y, color, shadow);
+            guiGraphics.text(font, text, centerX - width / 2, y, color, shadow);
             return;
         }
         // ⚠️ 缩放绕原点 ⇒ 先平移到"这一行的中心"，再以 -width/2 为起点画（等价于居中）
         var pose = guiGraphics.pose();
-        pose.pushPose();
-        pose.translate(centerX, y, 0.0F);
-        pose.scale(total, total, 1.0F);
-        guiGraphics.drawString(font, text, -width / 2, 0, color, shadow);
-        pose.popPose();
+        pose.pushMatrix();
+        pose.translate(centerX, y);
+        pose.scale(total, total);
+        guiGraphics.text(font, text, -width / 2, 0, color, shadow);
+        pose.popMatrix();
     }
 }

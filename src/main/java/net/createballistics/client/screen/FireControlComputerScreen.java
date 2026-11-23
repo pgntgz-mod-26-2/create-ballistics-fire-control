@@ -12,13 +12,15 @@ import net.createballistics.net.ComputerActionC2SPacket;
 import net.createballistics.util.PosDisplay;
 import net.createballistics.util.StageText;
 import net.createballistics.util.Texts;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraft.resources.Identifier;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 /**
  * 火控计算机界面 —— 手动输入打击坐标、下达、开火。
@@ -41,7 +43,7 @@ import net.neoforged.neoforge.network.PacketDistributor;
  */
 public class FireControlComputerScreen extends Screen {
 
-    private static final ResourceLocation PANEL = CreateBallistics.id("textures/gui/panel/computer.png");
+    private static final Identifier PANEL = CreateBallistics.id("textures/gui/panel/computer.png");
 
     public static final int W = 560;
     public static final int H = 300;
@@ -256,12 +258,12 @@ public class FireControlComputerScreen extends Screen {
 
     /** 回车 = 点「确认坐标并开始计算」。 */
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 257 || keyCode == 335) {   // Enter / 小键盘 Enter
+    public boolean keyPressed(KeyEvent event) {
+        if (event.key() == 257 || event.key() == 335) {   // Enter / 小键盘 Enter
             commit();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     // ---------------------------------------------------------------- 下达
@@ -292,14 +294,14 @@ public class FireControlComputerScreen extends Screen {
     }
 
     private void send(byte field, double value, double x, double y, double z) {
-        PacketDistributor.sendToServer(new ComputerActionC2SPacket(pos, field, value, x, y, z));
+        ClientPacketDistributor.sendToServer(new ComputerActionC2SPacket(pos, field, value, x, y, z));
     }
 
     // ---------------------------------------------------------------- 渲染
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // 必须在 super.render 之前刷新 —— 否则按钮这一帧画的还是上一帧的状态
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
+        // 必须在 super.extractRenderState 之前刷新 —— 否则按钮这一帧画的还是上一帧的状态
         refreshFireButton();
         refreshArcButton();
         refreshFireModeButton();
@@ -309,15 +311,15 @@ public class FireControlComputerScreen extends Screen {
         //     全被面板贴图压掉**，玩家看到的是一排空框、"按了没反应"（2026-09-26 大包实测报的）。
         //     指示器那个界面当初就是按正确顺序写的（见 ArtilleryIndicatorScreen 里同一句注释），
         //     这两个机器界面在 2026-09-24 重做版面时漏了。
-        graphics.blit(PANEL, originX, originY, 0.0F, 0.0F, W, H, W, H);
+        graphics.blit(RenderPipelines.GUI_TEXTURED, PANEL, originX, originY, 0.0F, 0.0F, W, H, W, H);
 
-        super.render(graphics, mouseX, mouseY, partialTick);
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 
-        graphics.pose().pushPose();
-        graphics.pose().translate(originX, originY, 0.0F);
-        graphics.pose().scale(TEXT_SCALE, TEXT_SCALE, 1.0F);
+        graphics.pose().pushMatrix();
+        graphics.pose().translate(originX, originY);
+        graphics.pose().scale(TEXT_SCALE, TEXT_SCALE);
         renderValues(graphics);
-        graphics.pose().popPose();
+        graphics.pose().popMatrix();
     }
 
     /**
@@ -383,14 +385,14 @@ public class FireControlComputerScreen extends Screen {
         return Math.round(panelPx / TEXT_SCALE);
     }
 
-    private void renderValues(GuiGraphics graphics) {
+    private void renderValues(GuiGraphicsExtractor graphics) {
         int tx = Math.round(16 / TEXT_SCALE);
         int ty = at(Y_TITLE);
 
-        graphics.drawString(font, title, tx, ty, TITLE);
+        graphics.text(font, title, tx, ty, TITLE);
 
         if (be == null) {
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.no_data"), tx, at(Y_NET), BAD);
+            graphics.text(font, Component.translatable("gui.create_ballistics.no_data"), tx, at(Y_NET), BAD);
             return;
         }
 
@@ -401,7 +403,7 @@ public class FireControlComputerScreen extends Screen {
         //    文案用的是**计算机专用的**那条键：原来共用协调器那条，写着"没有扫描任何炮位"，
         //    而计算机根本不扫描炮位（它是"算不出诸元"）—— 已在文案体检里拆开。
         if (!be.hasRotationPower()) {
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.power_short_computer",
+            graphics.text(font, Component.translatable("gui.create_ballistics.power_short_computer",
                             Texts.num("%.0f", Math.abs(be.getSpeed())),
                             Texts.num("%.0f", be.requiredRpm())).getString(),
                     tx + font.width(title) + 16, ty, BAD);
@@ -419,7 +421,7 @@ public class FireControlComputerScreen extends Screen {
         if (coordinators >= maxCoordinators) {
             String cLabel = Component.translatable("gui.create_ballistics.coordinators").getString() + ": ";
             String cValue = coordinators + " / " + maxCoordinators;
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.at_limit").getString(),
+            graphics.text(font, Component.translatable("gui.create_ballistics.at_limit").getString(),
                     tx + font.width(cLabel) + font.width(cValue) + 6, ty - LINE_H, WARN);
         }
 
@@ -454,7 +456,7 @@ public class FireControlComputerScreen extends Screen {
                     // 登记在册、但对方没把我们记成它的上级 —— 两边状态不一致，值得标出来
                     color = coordinator.isOnline() ? VALUE : WARN;
                 }
-                graphics.drawString(font, row, x, ty, color);
+                graphics.text(font, row, x, ty, color);
                 x += font.width(row) + 12;
                 index++;
                 if (++perRow == 2) {
@@ -475,14 +477,14 @@ public class FireControlComputerScreen extends Screen {
         // 「本级炮位」与「已就位」并成一行 —— 纵向余量按行算，省一行是一行
         ty = at(Y_NET2);
         String nodesLabel = Component.translatable("gui.create_ballistics.nodes").getString() + ": ";
-        graphics.drawString(font, nodesLabel, tx, ty, MUTED);
+        graphics.text(font, nodesLabel, tx, ty, MUTED);
         int nx = tx + font.width(nodesLabel);
         String cannonsText = String.valueOf(cannons);
-        graphics.drawString(font, cannonsText, nx, ty, cannons == 0 ? BAD : VALUE);
+        graphics.text(font, cannonsText, nx, ty, cannons == 0 ? BAD : VALUE);
         String readyLabel = "    " + Component.translatable("gui.create_ballistics.ready").getString() + ": ";
         int rx = nx + font.width(cannonsText);
-        graphics.drawString(font, readyLabel, rx, ty, MUTED);
-        graphics.drawString(font, ready + " / " + cannons, rx + font.width(readyLabel), ty,
+        graphics.text(font, readyLabel, rx, ty, MUTED);
+        graphics.text(font, ready + " / " + cannons, rx + font.width(readyLabel), ty,
                 cannons > 0 && ready == cannons ? GOOD : (unsolvable > 0 ? WARN : MUTED));
         ty += LINE_H;
 
@@ -501,7 +503,7 @@ public class FireControlComputerScreen extends Screen {
         Map<Integer, Integer> unreachable = be.notParticipatingByCoordinator();
         if (!unreachable.isEmpty()) {
             int uy = at(Y_UNREACH_HEAD);
-            graphics.drawString(font,
+            graphics.text(font,
                     Component.translatable("gui.create_ballistics.unreachable_header").getString(), tx, uy, BAD);
             uy = at(Y_UNREACH_FIRST);
             int slots = 0;
@@ -510,7 +512,7 @@ public class FireControlComputerScreen extends Screen {
                 if (slots >= Y_UNREACH_SLOTS) {
                     break;
                 }
-                graphics.drawString(font, Component.translatable("gui.create_ballistics.unreachable_entry",
+                graphics.text(font, Component.translatable("gui.create_ballistics.unreachable_entry",
                         entry.getKey(), entry.getValue()).getString(), tx, uy, BAD);
                 uy += LINE_H;
                 slots++;
@@ -522,29 +524,29 @@ public class FireControlComputerScreen extends Screen {
         // 两件事都很短，各占一行会把最后那点纵向余量吃光（本面板的余量是按行算的）。
         ty = at(Y_TARGET);
         String targetLabel = Component.translatable("gui.create_ballistics.target").getString() + ": ";
-        graphics.drawString(font, targetLabel, tx, ty, MUTED);
+        graphics.text(font, targetLabel, tx, ty, MUTED);
         int cx = tx + font.width(targetLabel);
         String targetText = be.hasTarget()
                 ? String.format(Locale.ROOT, "[%.0f, %.0f, %.0f]",
                         be.getTargetX(), be.getTargetY(), be.getTargetZ())
                 : Component.translatable("gui.create_ballistics.no_target").getString();
-        graphics.drawString(font, targetText, cx, ty, be.hasTarget() ? GOOD : BAD);
+        graphics.text(font, targetText, cx, ty, be.hasTarget() ? GOOD : BAD);
         cx += font.width(targetText) + 20;
 
         String indLabel = Component.translatable("gui.create_ballistics.indicators").getString() + ": ";
-        graphics.drawString(font, indLabel, cx, ty, MUTED);
-        graphics.drawString(font, be.indicatorSummary().getString(), cx + font.width(indLabel), ty,
+        graphics.text(font, indLabel, cx, ty, MUTED);
+        graphics.text(font, be.indicatorSummary().getString(), cx + font.width(indLabel), ty,
                 be.hasIndicator() ? VALUE : MUTED);
         ty += LINE_H;
 
         // ---- 计算过程：标签与内容并成一行（省下的那一行留给上面的汇总）----
         ty = at(Y_STAGE);
         String stageLabel = Component.translatable("gui.create_ballistics.stage").getString() + ": ";
-        graphics.drawString(font, stageLabel, tx, ty, MUTED);
-        graphics.drawString(font, stageText().getString(), tx + font.width(stageLabel), ty, stageColor());
+        graphics.text(font, stageLabel, tx, ty, MUTED);
+        graphics.text(font, stageText().getString(), tx + font.width(stageLabel), ty, stageColor());
 
         // 输入栏标签
-        graphics.drawString(font, Component.translatable("gui.create_ballistics.coord_label").getString(),
+        graphics.text(font, Component.translatable("gui.create_ballistics.coord_label").getString(),
                 Math.round(INPUT_X / TEXT_SCALE), Math.round((INPUT_Y - 11) / TEXT_SCALE), MUTED);
 
         // ⚠️ 「火力模式至少要 2 门炮」这句**必须画在界面里**，光靠聊天栏不行 ——
@@ -553,7 +555,7 @@ public class FireControlComputerScreen extends Screen {
         //    那一行本来就只有一个短标签，所以这句只在需要时出现（炮够时不画），也不会挤到谁。
         if (!be.hasEnoughCannonsForFireModes()) {
             Component hint = Component.translatable("gui.create_ballistics.fire_mode_needs_two_hint");
-            graphics.drawString(font, hint,
+            graphics.text(font, hint,
                     Math.max(0, (at(W) - font.width(hint)) / 2), at(211), WARN);
         }
     }
@@ -573,13 +575,13 @@ public class FireControlComputerScreen extends Screen {
         return StageText.color(be, minecraft == null ? null : minecraft.level);
     }
 
-    private int line(GuiGraphics graphics, int x, int y, String key, String value, int color) {
+    private int line(GuiGraphicsExtractor graphics, int x, int y, String key, String value, int color) {
         String text = Component.translatable(key).getString() + ": ";
-        graphics.drawString(font, text, x, y, MUTED);
+        graphics.text(font, text, x, y, MUTED);
         if (value != null) {
-            graphics.drawString(font, value, x + font.width(text), y, color);
+            graphics.text(font, value, x + font.width(text), y, color);
         } else {
-            graphics.drawString(font, Component.translatable("gui.create_ballistics.no_target").getString(),
+            graphics.text(font, Component.translatable("gui.create_ballistics.no_target").getString(),
                     x + font.width(text), y, color);
         }
         return y + LINE_H;

@@ -1,6 +1,7 @@
 package net.createballistics.client;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import net.createballistics.CreateBallistics;
 import net.minecraft.client.KeyMapping;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import org.lwjgl.glfw.GLFW;
@@ -15,7 +16,8 @@ import org.lwjgl.glfw.GLFW;
 public final class ModKeyMappings {
 
     /** 控制界面里那一栏的名字。 */
-    public static final String CATEGORY = "key.categories.create_ballistics";
+    public static final KeyMapping.Category CATEGORY =
+            new KeyMapping.Category(CreateBallistics.id("main"));
 
     /** H：打开手持火炮指示器的配置界面。 */
     public static final KeyMapping OPEN_INDICATOR = new KeyMapping(

@@ -1,78 +1,237 @@
 package net.createballistics.client.model;
 
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import net.createballistics.CreateBallistics;
-import net.createballistics.entity.DroneEntity;
-import net.minecraft.resources.ResourceLocation;
-import software.bernie.geckolib.animation.AnimationState;
-import software.bernie.geckolib.cache.object.GeoBone;
-import software.bernie.geckolib.model.GeoModel;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.resources.Identifier;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 /**
- * 无人机模型 —— <b>直接读卓越前线那份 Bedrock 模型</b>（`geo/drone.geo.json` + 它的动画文件）。
- *
- * <h2>为什么绕了一大圈才回到这里</h2>
- *
- * 一开始的路线是"把 Bedrock 模型**转成原版模型**、借原版的方块/物品管线渲染"，想着能避开 GeckoLib。
- * 结果十几个来回全卡在那条路上：原版只接受固定角度、UV 单位与 PNG 像素无关、面名/朝向的约定、
- * 物品管线拿不到逐面明暗、`ItemRenderer` 那句 `-0.5`、"缺面的立方体"要自己补……
- * **每一个都是我自己在猜原版管线的行为。**
- *
- * <p>而卓越前线用的 GeckoLib 是 **MIT 许可的独立动画库**（与我们的 GPL-3.0 兼容），
- * 而且**整合包里已经装了它**（卓越前线用 JarJar 内嵌，JarJar 依赖会被当普通模组加载）。
- * ⇒ **同一份模型、同一个渲染器**，外观不可能再不一样。
- *
- * <h2>桨叶自转</h2>
- *
- * 照卓越前线的 {@code DroneModel#collectTransform}：给四个 {@code wingXX} 骨骼
- * 统一 {@code setRotY((System.currentTimeMillis() % 36000000L) / 12.0F)}。
- *
- * <p>⚠️⚠️ <b>GeckoLib 的骨骼旋转是弧度，不是度</b> —— 我当初把它当度用，慢了 57.3 倍，
- * 慢到"同一侧两片同相"被看成"整侧绕着一个偏心圆心公转"。**抄数值一定要连单位一起抄。**
- *
- * <p>⚠️ 它自带的 `drone.animation.json` 里写的是骨骼名 {@code wing/wing2/wing3/wing4}，
- * **和模型里的 {@code wingFL/FR/BR/BL} 对不上** ⇒ 那个动画对桨叶**完全没作用**，
- * "转"是它在代码里手写出来的（这里也一样）。
+ * Native Bedrock geometry parser & renderer for {@code assets/create_ballistics/geo/drone.geo.json}
+ * without GeckoLib.
  */
-public class DroneModel extends GeoModel<DroneEntity> {
+public final class DroneModel {
 
-    private static final ResourceLocation MODEL = CreateBallistics.id("geo/drone.geo.json");
-    private static final ResourceLocation TEXTURE = CreateBallistics.id("textures/entity/drone.png");
-    private static final ResourceLocation ANIMATION = CreateBallistics.id("animations/drone.animation.json");
+    public static final Identifier TEXTURE = CreateBallistics.id("textures/entity/drone.png");
+    private static final Identifier MODEL = CreateBallistics.id("geo/drone.geo.json");
+    private static final String[] ROTOR_NAMES = {"wingFL", "wingFR", "wingBR", "wingBL"};
 
-    /** 四个桨叶骨骼的名字 —— 与 Bedrock 模型里逐字一致。 */
-    private static final String[] ROTORS = {"wingFL", "wingFR", "wingBR", "wingBL"};
+    private static volatile BakedModel cached;
 
-    @Override
-    public ResourceLocation getModelResource(DroneEntity animatable) {
-        return MODEL;
+    private DroneModel() {
     }
 
-    @Override
-    public ResourceLocation getTextureResource(DroneEntity animatable) {
-        return TEXTURE;
+    public static void render(PoseStack.Pose rootPose, VertexConsumer consumer, int lightCoords, float rotorSpinRad) {
+        BakedModel model = getOrLoad();
+        if (model == null) {
+            return;
+        }
+        emitQuads(rootPose, consumer, lightCoords, model.staticQuads);
+
+        PoseStack rotorStack = new PoseStack();
+        rotorStack.last().pose().set(rootPose.pose());
+        rotorStack.last().normal().set(rootPose.normal());
+        for (RotorBone rotor : model.rotors) {
+            rotorStack.pushPose();
+            rotorStack.translate(rotor.pivotX, rotor.pivotY, rotor.pivotZ);
+            rotorStack.mulPose(Axis.YP.rotation(rotorSpinRad));
+            rotorStack.translate(-rotor.pivotX, -rotor.pivotY, -rotor.pivotZ);
+            emitQuads(rotorStack.last(), consumer, lightCoords, rotor.quads);
+            rotorStack.popPose();
+        }
     }
 
-    @Override
-    public ResourceLocation getAnimationResource(DroneEntity animatable) {
-        return ANIMATION;
-    }
-
-    /**
-     * 每帧在"动画之后、渲染之前"直接拨桨叶骨骼 —— 这就是卓越前线的做法。
-     *
-     * <p>⚠️ 必须 {@code super} 先跑（它会按动画状态重置骨骼），我们再把自转覆盖上去，
-     * 否则会被动画那边覆盖掉。
-     */
-    @Override
-    public void setCustomAnimations(DroneEntity animatable, long instanceId, AnimationState<DroneEntity> animationState) {
-        super.setCustomAnimations(animatable, instanceId, animationState);
-
-        float spin = (float) (System.currentTimeMillis() % 36000000L) / 12.0F;   // 弧度（照原版）
-        for (String name : ROTORS) {
-            GeoBone bone = this.getAnimationProcessor().getBone(name);
-            if (bone != null) {
-                bone.setRotY(spin);
+    private static void emitQuads(PoseStack.Pose pose, VertexConsumer consumer, int light, List<BakedQuad> quads) {
+        Matrix4f posMat = pose.pose();
+        Matrix3f normMat = pose.normal();
+        Vector3f p = new Vector3f();
+        Vector3f n = new Vector3f();
+        for (BakedQuad quad : quads) {
+            normMat.transform(quad.nx, quad.ny, quad.nz, n);
+            for (int i = 0; i < 4; i++) {
+                float x = quad.vx[i];
+                float y = quad.vy[i];
+                float z = quad.vz[i];
+                posMat.transformPosition(x, y, z, p);
+                consumer.addVertex(p.x, p.y, p.z, -1, quad.u[i], quad.v[i],
+                        OverlayTexture.NO_OVERLAY, light, n.x, n.y, n.z);
             }
         }
     }
+
+    private static BakedModel getOrLoad() {
+        BakedModel existing = cached;
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (DroneModel.class) {
+            if (cached != null) {
+                return cached;
+            }
+            try {
+                var resource = Minecraft.getInstance().getResourceManager().getResource(MODEL);
+                if (resource.isEmpty()) {
+                    return null;
+                }
+                try (var reader = new InputStreamReader(resource.get().open(), StandardCharsets.UTF_8)) {
+                    BakedModel loaded = parse(JsonParser.parseReader(reader).getAsJsonObject());
+                    cached = loaded;
+                    return loaded;
+                }
+            } catch (Exception e) {
+                CreateBallistics.LOGGER.error("Failed to load drone model {}", MODEL, e);
+                return null;
+            }
+        }
+    }
+
+    private static BakedModel parse(JsonObject root) {
+        JsonArray geometries = root.getAsJsonArray("minecraft:geometry");
+        JsonObject geo = geometries.get(0).getAsJsonObject();
+        JsonObject desc = geo.getAsJsonObject("description");
+        float texW = desc.get("texture_width").getAsFloat();
+        float texH = desc.get("texture_height").getAsFloat();
+
+        Map<String, BoneEntry> bones = new LinkedHashMap<>();
+        for (JsonElement el : geo.getAsJsonArray("bones")) {
+            JsonObject boneObj = el.getAsJsonObject();
+            String name = boneObj.get("name").getAsString();
+            JsonArray pivArr = boneObj.getAsJsonArray("pivot");
+            float pivX = pivArr != null ? -pivArr.get(0).getAsFloat() / 16.0F : 0.0F;
+            float pivY = pivArr != null ? pivArr.get(1).getAsFloat() / 16.0F : 0.0F;
+            float pivZ = pivArr != null ? pivArr.get(2).getAsFloat() / 16.0F : 0.0F;
+
+            List<BakedQuad> boneQuads = new ArrayList<>();
+            if (boneObj.has("cubes")) {
+                for (JsonElement cEl : boneObj.getAsJsonArray("cubes")) {
+                    addCubeQuads(cEl.getAsJsonObject(), texW, texH, boneQuads);
+                }
+            }
+            bones.put(name, new BoneEntry(name, pivX, pivY, pivZ, boneQuads));
+        }
+
+        List<BakedQuad> staticQuads = new ArrayList<>();
+        List<RotorBone> rotors = new ArrayList<>();
+        Map<String, Boolean> rotorSet = Map.of(
+                ROTOR_NAMES[0], true, ROTOR_NAMES[1], true, ROTOR_NAMES[2], true, ROTOR_NAMES[3], true);
+
+        for (BoneEntry b : bones.values()) {
+            if (rotorSet.containsKey(b.name)) {
+                rotors.add(new RotorBone(b.pivX, b.pivY, b.pivZ, b.quads));
+            } else {
+                staticQuads.addAll(b.quads);
+            }
+        }
+        return new BakedModel(staticQuads, rotors);
+    }
+
+    private static void addCubeQuads(JsonObject cube, float texW, float texH, List<BakedQuad> out) {
+        JsonArray origin = cube.getAsJsonArray("origin");
+        JsonArray size = cube.getAsJsonArray("size");
+        float ox = origin.get(0).getAsFloat();
+        float oy = origin.get(1).getAsFloat();
+        float oz = origin.get(2).getAsFloat();
+        float sx = size.get(0).getAsFloat();
+        float sy = size.get(1).getAsFloat();
+        float sz = size.get(2).getAsFloat();
+
+        // Bedrock -> MC right-handed X-negated cube bounds
+        float x0 = -(ox + sx) / 16.0F;
+        float x1 = -ox / 16.0F;
+        float y0 = oy / 16.0F;
+        float y1 = (oy + sy) / 16.0F;
+        float z0 = oz / 16.0F;
+        float z1 = (oz + sz) / 16.0F;
+
+        Matrix4f cubeMat = new Matrix4f();
+        if (cube.has("rotation")) {
+            JsonArray rot = cube.getAsJsonArray("rotation");
+            JsonArray piv = cube.has("pivot") ? cube.getAsJsonArray("pivot") : null;
+            float px = piv != null ? -piv.get(0).getAsFloat() / 16.0F : 0.0F;
+            float py = piv != null ? piv.get(1).getAsFloat() / 16.0F : 0.0F;
+            float pz = piv != null ? piv.get(2).getAsFloat() / 16.0F : 0.0F;
+            float rx = (float) Math.toRadians(-rot.get(0).getAsFloat());
+            float ry = (float) Math.toRadians(-rot.get(1).getAsFloat());
+            float rz = (float) Math.toRadians(rot.get(2).getAsFloat());
+            cubeMat.translate(px, py, pz)
+                    .rotateZ(rz)
+                    .rotateY(ry)
+                    .rotateX(rx)
+                    .translate(-px, -py, -pz);
+        }
+
+        JsonObject uvObj = cube.getAsJsonObject("uv");
+        if (uvObj == null) {
+            return;
+        }
+        addFaceIfPresent(uvObj, "north", texW, texH, cubeMat, out,
+                x1, y1, z0, x1, y0, z0, x0, y0, z0, x0, y1, z0, 0, 0, -1);
+        addFaceIfPresent(uvObj, "south", texW, texH, cubeMat, out,
+                x0, y1, z1, x0, y0, z1, x1, y0, z1, x1, y1, z1, 0, 0, 1);
+        addFaceIfPresent(uvObj, "east", texW, texH, cubeMat, out,
+                x0, y1, z0, x0, y0, z0, x0, y0, z1, x0, y1, z1, -1, 0, 0);
+        addFaceIfPresent(uvObj, "west", texW, texH, cubeMat, out,
+                x1, y1, z1, x1, y0, z1, x1, y0, z0, x1, y1, z0, 1, 0, 0);
+        addFaceIfPresent(uvObj, "up", texW, texH, cubeMat, out,
+                x0, y1, z0, x0, y1, z1, x1, y1, z1, x1, y1, z0, 0, 1, 0);
+        addFaceIfPresent(uvObj, "down", texW, texH, cubeMat, out,
+                x0, y0, z1, x0, y0, z0, x1, y0, z0, x1, y0, z1, 0, -1, 0);
+    }
+
+    private static void addFaceIfPresent(JsonObject uvObj, String face, float texW, float texH,
+                                         Matrix4f cubeMat, List<BakedQuad> out,
+                                         float ax, float ay, float az,
+                                         float bx, float by, float bz,
+                                         float cx, float cy, float cz,
+                                         float dx, float dy, float dz,
+                                         float nx, float ny, float nz) {
+        if (!uvObj.has(face)) {
+            return;
+        }
+        JsonObject f = uvObj.getAsJsonObject(face);
+        JsonArray uv = f.getAsJsonArray("uv");
+        JsonArray uvSize = f.getAsJsonArray("uv_size");
+        float u0 = uv.get(0).getAsFloat() / texW;
+        float v0 = uv.get(1).getAsFloat() / texH;
+        float u1 = (uv.get(0).getAsFloat() + uvSize.get(0).getAsFloat()) / texW;
+        float v1 = (uv.get(1).getAsFloat() + uvSize.get(1).getAsFloat()) / texH;
+
+        Vector3f va = cubeMat.transformPosition(new Vector3f(ax, ay, az));
+        Vector3f vb = cubeMat.transformPosition(new Vector3f(bx, by, bz));
+        Vector3f vc = cubeMat.transformPosition(new Vector3f(cx, cy, cz));
+        Vector3f vd = cubeMat.transformPosition(new Vector3f(dx, dy, dz));
+        Vector3f vn = cubeMat.transformDirection(new Vector3f(nx, ny, nz)).normalize();
+
+        out.add(new BakedQuad(
+                new float[]{va.x, vb.x, vc.x, vd.x},
+                new float[]{va.y, vb.y, vc.y, vd.y},
+                new float[]{va.z, vb.z, vc.z, vd.z},
+                new float[]{u0, u0, u1, u1},
+                new float[]{v0, v1, v1, v0},
+                vn.x, vn.y, vn.z));
+    }
+
+    private record BakedQuad(float[] vx, float[] vy, float[] vz, float[] u, float[] v,
+                             float nx, float ny, float nz) {}
+
+    private record BoneEntry(String name, float pivX, float pivY, float pivZ, List<BakedQuad> quads) {}
+
+    private record RotorBone(float pivotX, float pivotY, float pivotZ, List<BakedQuad> quads) {}
+
+    private record BakedModel(List<BakedQuad> staticQuads, List<RotorBone> rotors) {}
 }

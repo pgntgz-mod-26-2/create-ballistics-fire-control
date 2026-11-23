@@ -69,9 +69,8 @@ public abstract class CameraMixin {
     @Shadow
     protected abstract void setPosition(double x, double y, double z);
 
-    @Inject(method = "setup", at = @At("RETURN"))
-    private void createballistics$droneCamera(BlockGetter level, Entity entity, boolean detached,
-                                              boolean thirdPersonReverse, float partialTick, CallbackInfo ci) {
+    @Inject(method = "alignWithEntity(F)V", at = @At("RETURN"))
+    private void createballistics$droneCamera(float partialTick, CallbackInfo ci) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         if (player == null) {

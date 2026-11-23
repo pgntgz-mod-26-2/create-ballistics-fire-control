@@ -9,16 +9,17 @@ import net.createballistics.util.Texts;
 import net.minecraft.client.CameraType;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.LayeredDraw;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.gui.GuiLayer;
 
 /**
  * 火炮指示器举起时的镜筒迭加层 —— 对应卓越前线的 {@code SpyglassRangeOverlay}。
@@ -46,9 +47,9 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>⇒ 玩家<b>看不到原版望远镜的外观是预期行为</b>，不是坏掉（2026-09-22 用户实测确认过这一点）。
  */
-public final class IndicatorOverlay implements LayeredDraw.Layer {
+public final class IndicatorOverlay implements GuiLayer {
 
-    private static final ResourceLocation FRAME = CreateBallistics.id("textures/overlay/spyglass/spyglass.png");
+    private static final Identifier FRAME = CreateBallistics.id("textures/overlay/spyglass/spyglass.png");
 
     /** 贴图的原始尺寸，也是那个 21:9 的来历。 */
     private static final int FRAME_TEX_W = 2100;
@@ -69,7 +70,7 @@ public final class IndicatorOverlay implements LayeredDraw.Layer {
     private static float scopeScale = 1.0F;
 
     @Override
-    public void render(GuiGraphics guiGraphics, DeltaTracker deltaTracker) {
+    public void render(GuiGraphicsExtractor guiGraphics, DeltaTracker deltaTracker) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
 
@@ -91,7 +92,7 @@ public final class IndicatorOverlay implements LayeredDraw.Layer {
         drawChargeRing(guiGraphics, centerX, centerY);
         drawStageText(guiGraphics, player, screenW, screenH);
 
-        guiGraphics.drawString(mc.font, rangeText(player, partial),
+        guiGraphics.text(mc.font, rangeText(player, partial),
                 screenW / 2 + 12, screenH / 2 - 28, -1, false);
 
         // ⚠️ 这里**刻意不画「火力模式需 2 门炮」那句提示** —— 2026-09-25 用户要求撤掉：
@@ -108,7 +109,7 @@ public final class IndicatorOverlay implements LayeredDraw.Layer {
      * <p>原料来自指示器身上的<b>镜像快照</b>：倒计时用的是排期结束的 tick，客户端拿自己的
      * 游戏时间现算 ⇒ 照样一秒一秒走，不会停在快照那一刻。
      */
-    private static void drawStageText(GuiGraphics guiGraphics, LocalPlayer player, int screenW, int screenH) {
+    private static void drawStageText(GuiGraphicsExtractor guiGraphics, LocalPlayer player, int screenW, int screenH) {
         StageText.Snapshot snapshot = ArtilleryIndicatorItem.mirroredStage(player.getMainHandItem());
         if (snapshot == null) {
             return;
@@ -143,7 +144,7 @@ public final class IndicatorOverlay implements LayeredDraw.Layer {
      *       {@code DroneHudOverlay} 的类注释（方案 A）。</li>
      * </ol>
      */
-    private static void drawMarks(GuiGraphics guiGraphics, LocalPlayer player, int screenW, int screenH) {
+    private static void drawMarks(GuiGraphicsExtractor guiGraphics, LocalPlayer player, int screenW, int screenH) {
         // 开镜变焦会收窄真实视场，判"看不看得见"要用变焦后的
         double fov = Minecraft.getInstance().options.fov().get() / IndicatorClientEvents.currentZoom();
         BlockPos marked = player.getMainHandItem().get(ModDataComponents.LAST_TARGET.get());
@@ -165,7 +166,7 @@ public final class IndicatorOverlay implements LayeredDraw.Layer {
      * 用户拿截图跟卓越前线一对比就指出：那是<b>长按左键的蓄力进度</b>，
      * 而且常显的粗圆环正好糊在准星上、挡视线。所以现在<b>只有按住左键</b>时才画。
      */
-    private static void drawChargeRing(GuiGraphics guiGraphics, float centerX, float centerY) {
+    private static void drawChargeRing(GuiGraphicsExtractor guiGraphics, float centerX, float centerY) {
         // 画法、半径、颜色都在 OverlayShapes 那**唯一一份**里（图传 HUD 用的是同一个）
         OverlayShapes.chargeRing(guiGraphics, centerX, centerY, IndicatorClientEvents.chargeProgress());
     }
@@ -177,12 +178,12 @@ public final class IndicatorOverlay implements LayeredDraw.Layer {
      * {@code uWidth/textureWidth} 一起传成同一个值，UV 恰好算成 0→1，<b>实际效果就是满铺</b>。
      * 我们直接用原版 {@code blit} 表达同一件事：源区域 = 整张贴图，目标 = 算出来的矩形。
      */
-    private static void drawFrame(GuiGraphics guiGraphics, int screenW, int screenH) {
+    private static void drawFrame(GuiGraphicsExtractor guiGraphics, int screenW, int screenH) {
         float shorter = Math.min(screenW, screenH) * scopeScale;
         int height = Math.max(1, Math.round(shorter));
         int width = Math.max(1, Math.round(shorter * FRAME_ASPECT));
-        guiGraphics.blit(FRAME, (screenW - width) / 2, (screenH - height) / 2, width, height,
-                0.0F, 0.0F, FRAME_TEX_W, FRAME_TEX_H, FRAME_TEX_W, FRAME_TEX_H);
+        guiGraphics.blit(RenderPipelines.GUI_TEXTURED, FRAME, (screenW - width) / 2, (screenH - height) / 2,
+                0.0F, 0.0F, width, height, FRAME_TEX_W, FRAME_TEX_H, FRAME_TEX_W, FRAME_TEX_H);
     }
 
     /**

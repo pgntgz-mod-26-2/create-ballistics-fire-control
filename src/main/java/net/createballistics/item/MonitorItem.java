@@ -3,6 +3,7 @@ package net.createballistics.item;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.function.Consumer;
 import net.createballistics.CreateBallistics;
 import net.createballistics.client.PilotCamera;
 import net.createballistics.entity.DroneEntity;
@@ -15,12 +16,14 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResultHolder;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.component.TooltipDisplay;
 import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.Nullable;
 
@@ -99,7 +102,7 @@ public class MonitorItem extends Item {
      * <b>访问转换器</b>（{@code META-INF/accesstransformer.cfg}）—— 它也是为了这一处加的。
      *
      * <p>⚠️⚠️ <b>专用服务器安全</b>：客户端那条（要 {@code ClientLevel} + 访问转换器）**搬去了
-     * {@code client/DroneClientAccess}**，这里只在 {@code level.isClientSide} 的闸门里调它 ——
+     * {@code client/DroneClientAccess}**，这里只在 {@code level.isClientSide()} 的闸门里调它 ——
      * 服务端的分发包里没有 {@code net/minecraft/client/**}，公共类一旦在服务端的执行路径上碰到
      * 那些类就会 {@code NoClassDefFoundError}。
      * （⚠️ 原来这里写的是 {@code if (level instanceof ClientLevel …)} 加一句"服务端永远走不到"——
@@ -108,7 +111,7 @@ public class MonitorItem extends Item {
      */
     @Nullable
     public static DroneEntity findLinked(Level level, UUID id) {
-        if (level.isClientSide) {
+        if (level.isClientSide()) {
             return net.createballistics.client.DroneClientAccess.findClient(level, id);
         }
         if (level instanceof ServerLevel server) {
@@ -134,16 +137,16 @@ public class MonitorItem extends Item {
      * {@link Item#use}，所以那种情况也会切一次视角。先照它，不为此加特判。
      */
     @Override
-    public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
+    public InteractionResult use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
         if (hand != InteractionHand.MAIN_HAND) {
-            return InteractionResultHolder.pass(stack);
+            return InteractionResult.PASS;
         }
         if (linkedDrone(stack) == null) {
             // 禁用态要把原因说出来（本模组的规矩）——不然玩家只会觉得"右键没反应"
-            player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.unbound")
-                    .withStyle(ChatFormatting.RED), true);
-            return InteractionResultHolder.fail(stack);
+            player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.unbound")
+                    .withStyle(ChatFormatting.RED));
+            return InteractionResult.FAIL;
         }
         boolean next = !isPiloting(stack);
         // ⚠️ 进视角前先确认**这台无人机现在真的找得到**，找不到就别进（2026-09-26 修）。
@@ -152,12 +155,12 @@ public class MonitorItem extends Item {
         //    玩家看到的是"原版反复弹第一人称 / 视角进不去"，而且全程黑屏。
         //    ⚠️ 只拦"进"，**不拦"出"** —— 退出这条路必须永远走得通（见下方 release 的谨慎）。
         if (next && findLinked(level, linkedDrone(stack)) == null) {
-            player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.no_signal")
-                    .withStyle(ChatFormatting.RED), true);
-            return InteractionResultHolder.fail(stack);
+            player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.no_signal")
+                    .withStyle(ChatFormatting.RED));
+            return InteractionResult.FAIL;
         }
         stack.set(ModDataComponents.MONITOR_USING.get(), next);
-        if (level.isClientSide) {
+        if (level.isClientSide()) {
             // ⚠️ 只在客户端分支里碰客户端类（见类注释）
             if (next) {
                 PilotCamera.enter();
@@ -165,7 +168,7 @@ public class MonitorItem extends Item {
                 PilotCamera.exit();
             }
         }
-        return InteractionResultHolder.success(stack);
+        return InteractionResult.SUCCESS;
     }
 
     /**
@@ -175,10 +178,11 @@ public class MonitorItem extends Item {
      * 遥控器被换到别的槽位、解绑了、那台无人机没了（撞坏炸掉 / 被收起 / 主人离线时被摧毁）。
      */
     @Override
-    public void inventoryTick(ItemStack stack, Level level, Entity entity, int slot, boolean selected) {
+    public void inventoryTick(ItemStack stack, ServerLevel level, Entity entity, @Nullable EquipmentSlot slot) {
         if (!isPiloting(stack)) {
             return;
         }
+        boolean selected = slot == EquipmentSlot.MAINHAND;
         UUID linked = linkedDrone(stack);
         if (!selected || linked == null || findLinked(level, linked) == null) {
             // ⚠️ 这条兜底是"视角进不去 / 相机类型反复翻转"时最关键的一条日志：
@@ -187,11 +191,8 @@ public class MonitorItem extends Item {
             CreateBallistics.LOGGER.info(
                     "[火控] 遥控器自动退出视角：槽位选中={} 有绑定={} 找得到无人机={}（侧别={}）",
                     selected, linked != null, linked != null && findLinked(level, linked) != null,
-                    level.isClientSide ? "客户端" : "服务端");
+                    level.isClientSide() ? "客户端" : "服务端");
             stack.remove(ModDataComponents.MONITOR_USING.get());
-            if (level.isClientSide) {
-                PilotCamera.exit();
-            }
         }
     }
 
@@ -222,16 +223,16 @@ public class MonitorItem extends Item {
 
         // 幂等：本来就绑着它，再说一次就好
         if (linked != null && linked.equals(id)) {
-            player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.linked")
-                    .withStyle(ChatFormatting.GREEN), true);
+            player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.linked")
+                    .withStyle(ChatFormatting.GREEN));
             return true;
         }
         // ⚠️ 判据顺序：**最具体的放前面**。被别人占着是玩家无论怎么做都改不了的事，
         //    先说它，才不会用"你先解绑"这种他做得到但没用的话把他引偏。
         String controller = drone.getController();
         if (controller != null && !controller.equals(player.getStringUUID())) {
-            player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.taken")
-                    .withStyle(ChatFormatting.RED), true);
+            player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.taken")
+                    .withStyle(ChatFormatting.RED));
             return false;
         }
         // ⚠️⚠️ **自愈：本子上记的那台其实已经没了**（炸了 / 被收了，而服务端的自动解绑那一环
@@ -247,15 +248,15 @@ public class MonitorItem extends Item {
         }
         // 剩下两种冲突：无人机已绑在这个人的另一台遥控器上 / 这台的记录还指着别的无人机
         if (controller != null || linked != null) {
-            player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.busy")
-                    .withStyle(ChatFormatting.RED), true);
+            player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.busy")
+                    .withStyle(ChatFormatting.RED));
             return false;
         }
 
         stack.set(ModDataComponents.LINKED_DRONE.get(), id);
         drone.setController(player);
-        player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.linked")
-                .withStyle(ChatFormatting.GREEN), true);
+        player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.linked")
+                .withStyle(ChatFormatting.GREEN));
         return true;
     }
 
@@ -263,8 +264,8 @@ public class MonitorItem extends Item {
     private static void release(Player player, ItemStack stack, DroneEntity drone) {
         UUID linked = linkedDrone(stack);
         if (linked == null) {
-            player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.not_linked")
-                    .withStyle(ChatFormatting.RED), true);
+            player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.not_linked")
+                    .withStyle(ChatFormatting.RED));
             return;
         }
         stack.remove(ModDataComponents.LINKED_DRONE.get());
@@ -272,8 +273,8 @@ public class MonitorItem extends Item {
             drone.clearController();
         }
         // 原来指着另一台也没关系 —— 那一台会自己复核（见 DroneEntity#verifyController）
-        player.displayClientMessage(Component.translatable("item.create_ballistics.monitor.unlinked")
-                .withStyle(ChatFormatting.RED), true);
+        player.sendOverlayMessage(Component.translatable("item.create_ballistics.monitor.unlinked")
+                .withStyle(ChatFormatting.RED));
     }
 
     // ------------------------------------------------------------------
@@ -312,7 +313,7 @@ public class MonitorItem extends Item {
             }
         }
         CreateBallistics.LOGGER.info("[火控] 无人机没了 ⇒ 自动解绑：无人机={} 主人={} 清掉 {} 台遥控器",
-                droneId, owner.getGameProfile().getName(), cleared);
+                droneId, owner.getPlainTextName(), cleared);
         if (cleared > 0) {
             // ⚠️⚠️ **必须再强推一次整份容器同步**（2026-09-26 修「炸毁后遥控器还显示已绑定」）。
             //    `broadcastChanges()` 只比对"服务端槽位 vs 上次发出去的那份"，**组件级的改动
@@ -336,9 +337,9 @@ public class MonitorItem extends Item {
 
     /** 这个人身上所有可能放物品的格子（主栏 + 副手）。 */
     private static Iterable<ItemStack> heldStacks(Player player) {
-        List<ItemStack> all = new java.util.ArrayList<>(player.getInventory().items.size() + 1);
-        all.addAll(player.getInventory().items);
-        all.addAll(player.getInventory().offhand);
+        List<ItemStack> all = new java.util.ArrayList<>(player.getInventory().getNonEquipmentItems().size() + 1);
+        all.addAll(player.getInventory().getNonEquipmentItems());
+        all.add(player.getOffhandItem());
         return all;
     }
 
@@ -380,13 +381,13 @@ public class MonitorItem extends Item {
      * 引入一条每 N tick 改物品组件的同步链（那正是 B1 那轮换手动画的来源）。
      */
     @Override
-    public void appendHoverText(ItemStack stack, Item.TooltipContext context, List<Component> tooltip,
-                                TooltipFlag flag) {
+    public void appendHoverText(ItemStack stack, Item.TooltipContext context, TooltipDisplay display,
+                                Consumer<Component> tooltip, TooltipFlag flag) {
         Tooltips.addLines(tooltip, "item.create_ballistics.monitor.help", ChatFormatting.GRAY);
 
         UUID linked = linkedDrone(stack);
         if (linked == null) {
-            tooltip.add(Component.translatable("item.create_ballistics.monitor.unbound")
+            tooltip.accept(Component.translatable("item.create_ballistics.monitor.unbound")
                     .withStyle(ChatFormatting.DARK_GRAY));
             return;
         }
@@ -394,22 +395,22 @@ public class MonitorItem extends Item {
         Player player = net.createballistics.client.DroneClientAccess.localPlayer();
         DroneEntity drone = player == null ? null : findLinked(player.level(), linked);
         if (drone == null) {
-            tooltip.add(Component.translatable("item.create_ballistics.monitor.bound")
+            tooltip.accept(Component.translatable("item.create_ballistics.monitor.bound")
                     .withStyle(ChatFormatting.AQUA));
             // 分不清"飞远了"与"区块没加载"，两种可能都说 —— 与 node_unavailable 那句同一个谨慎
-            tooltip.add(Component.translatable("item.create_ballistics.monitor.no_signal")
+            tooltip.accept(Component.translatable("item.create_ballistics.monitor.no_signal")
                     .withStyle(ChatFormatting.DARK_GRAY));
             return;
         }
 
-        tooltip.add(Component.translatable("item.create_ballistics.monitor.bound")
+        tooltip.accept(Component.translatable("item.create_ballistics.monitor.bound")
                 .withStyle(ChatFormatting.AQUA));
-        tooltip.add(Component.translatable("item.create_ballistics.monitor.distance",
+        tooltip.accept(Component.translatable("item.create_ballistics.monitor.distance",
                 format(drone.distanceTo(player))).withStyle(ChatFormatting.GRAY));
         // ⚠️ 坐标不能用 format(...)：那个帮手是给距离用的，会自己补一个 "m"
         // ⚠️ 坐标读数走 PosDisplay：无人机还在船附近（图幅系）时，直接报的坐标是 2896 万格那种。
         Vec3 shown = PosDisplay.of(drone.level(), drone.position());
-        tooltip.add(Component.translatable("item.create_ballistics.monitor.position",
+        tooltip.accept(Component.translatable("item.create_ballistics.monitor.position",
                 String.format(Locale.ROOT, "%.1f", shown.x()),
                 String.format(Locale.ROOT, "%.1f", shown.y()),
                 String.format(Locale.ROOT, "%.1f", shown.z())).withStyle(ChatFormatting.GRAY));

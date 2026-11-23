@@ -102,7 +102,7 @@ public class DroneEngineSound extends AbstractTickableSoundInstance {
         // 多普勒：离近了压一点、离远了抬一点（照它）。
         // ⚠️ 距离**平滑后**再喂给它：一边是"每帧算的相机位置"、另一边是"每 tick 的实体位置"，
         //    两者能差上好几格 ⇒ 原始值每 tick 都在抖 ⇒ 多普勒跟着抖 ⇒ 炸音。
-        Vec3 cameraPos = minecraft.gameRenderer.getMainCamera().getPosition();
+        Vec3 cameraPos = minecraft.gameRenderer.mainCamera().position();
         double distance = drone.position().distanceTo(cameraPos);
         double smoothed = lastDistance < 0.0 ? distance : Mth.lerp(0.35, lastDistance, distance);
         this.pitch += (float) (0.16 * Math.atan(lastDistance < 0.0 ? 0.0 : lastDistance - smoothed));

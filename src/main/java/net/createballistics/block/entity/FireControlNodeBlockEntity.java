@@ -705,7 +705,7 @@ public class FireControlNodeBlockEntity extends KineticBlockEntity implements IH
 
     /** {@link #tick} 的本体 —— 拆出来只为了给它计时。 */
     private void tickBody() {
-        if (level == null || level.isClientSide) {
+        if (level == null || level.isClientSide()) {
             return;
         }
 
@@ -2582,67 +2582,67 @@ public class FireControlNodeBlockEntity extends KineticBlockEntity implements IH
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
 
-        mountPos = tag.getBoolean("HasMount")
-                ? new BlockPos(tag.getInt("MountX"), tag.getInt("MountY"), tag.getInt("MountZ"))
+        mountPos = tag.getBooleanOr("HasMount", false)
+                ? new BlockPos(tag.getIntOr("MountX", 0), tag.getIntOr("MountY", 0), tag.getIntOr("MountZ", 0))
                 : null;
 
-        probedCharges = tag.getInt("ProbedCharges");
-        probedMaxCharges = tag.getInt("ProbedMaxCharges");
-        probedBarrelBlocks = tag.getInt("ProbedBarrelBlocks");
-        probedMaterial = tag.getString("ProbedMaterial");
-        probedChambers = tag.getInt("ProbedChambers");
-        probedSpread = tag.getFloat("ProbedSpread");
-        probedSpreadInLine = tag.getFloat("ProbedSpreadInLine");
-        probedSpreadFree = tag.getInt("ProbedSpreadFree");
-        probedVelocity = tag.getFloat("ProbedVelocity");
-        probedMinPitch = tag.getFloat("ProbedMinPitch");
-        probedMaxPitch = tag.getFloat("ProbedMaxPitch");
+        probedCharges = tag.getIntOr("ProbedCharges", 0);
+        probedMaxCharges = tag.getIntOr("ProbedMaxCharges", 0);
+        probedBarrelBlocks = tag.getIntOr("ProbedBarrelBlocks", 0);
+        probedMaterial = tag.getStringOr("ProbedMaterial", "");
+        probedChambers = tag.getIntOr("ProbedChambers", 0);
+        probedSpread = tag.getFloatOr("ProbedSpread", 0.0F);
+        probedSpreadInLine = tag.getFloatOr("ProbedSpreadInLine", 0.0F);
+        probedSpreadFree = tag.getIntOr("ProbedSpreadFree", 0);
+        probedVelocity = tag.getFloatOr("ProbedVelocity", 0.0F);
+        probedMinPitch = tag.getFloatOr("ProbedMinPitch", 0.0F);
+        probedMaxPitch = tag.getFloatOr("ProbedMaxPitch", 0.0F);
 
-        probedMaterialMaxStress = tag.getInt("ProbedMaterialMaxStress");
-        probedBreechStrength = tag.getInt("ProbedBreechStrength");
-        probedBreechName = tag.getString("ProbedBreechName");
-        probedMinVelPerBarrel = tag.getFloat("ProbedMinVelPerBarrel");
-        probedChargePower = tag.getFloat("ProbedChargePower");
-        probedShellItemId = tag.getString("ProbedShellItemId");
-        probedPropellantId = tag.getString("ProbedPropellantId");
-        probedPropellantPower = tag.getInt("ProbedPropellantPower");
-        probedPropellantMaxPower = tag.getInt("ProbedPropellantMaxPower");
-        probedChargeLengthMeters = tag.getFloat("ProbedChargeLengthMeters");
-        probedSquib = tag.getBoolean("ProbedSquib");
-        probedBarrelMeters = tag.getFloat("ProbedBarrelMeters");
-        probedExplosionPower = tag.getFloat("ProbedExplosionPower");
-        probedMaxRange = tag.getFloat("ProbedMaxRange");
-        probedMinSafeRange = tag.getFloat("ProbedMinSafeRange");
+        probedMaterialMaxStress = tag.getIntOr("ProbedMaterialMaxStress", 0);
+        probedBreechStrength = tag.getIntOr("ProbedBreechStrength", 0);
+        probedBreechName = tag.getStringOr("ProbedBreechName", "");
+        probedMinVelPerBarrel = tag.getFloatOr("ProbedMinVelPerBarrel", 0.0F);
+        probedChargePower = tag.getFloatOr("ProbedChargePower", 0.0F);
+        probedShellItemId = tag.getStringOr("ProbedShellItemId", "");
+        probedPropellantId = tag.getStringOr("ProbedPropellantId", "");
+        probedPropellantPower = tag.getIntOr("ProbedPropellantPower", 0);
+        probedPropellantMaxPower = tag.getIntOr("ProbedPropellantMaxPower", 0);
+        probedChargeLengthMeters = tag.getFloatOr("ProbedChargeLengthMeters", 0.0F);
+        probedSquib = tag.getBooleanOr("ProbedSquib", false);
+        probedBarrelMeters = tag.getFloatOr("ProbedBarrelMeters", 0.0F);
+        probedExplosionPower = tag.getFloatOr("ProbedExplosionPower", 0.0F);
+        probedMaxRange = tag.getFloatOr("ProbedMaxRange", 0.0F);
+        probedMinSafeRange = tag.getFloatOr("ProbedMinSafeRange", 0.0F);
 
-        masterPos = tag.getBoolean("HasMaster")
-                ? new BlockPos(tag.getInt("MasterX"), tag.getInt("MasterY"), tag.getInt("MasterZ"))
+        masterPos = tag.getBooleanOr("HasMaster", false)
+                ? new BlockPos(tag.getIntOr("MasterX", 0), tag.getIntOr("MasterY", 0), tag.getIntOr("MasterZ", 0))
                 : null;
 
-        hasTarget = tag.getBoolean("HasTarget");
-        targetX = tag.getDouble("TargetX");
-        targetY = tag.getDouble("TargetY");
-        targetZ = tag.getDouble("TargetZ");
-        aimHeight = tag.getDouble("AimHeight");
-        targetPitch = tag.getFloat("TargetPitch");
-        targetYaw = tag.getFloat("TargetYaw");
-        aiming = tag.getBoolean("Aiming");
-        solvable = tag.getBoolean("Solvable");
+        hasTarget = tag.getBooleanOr("HasTarget", false);
+        targetX = tag.getDoubleOr("TargetX", 0.0);
+        targetY = tag.getDoubleOr("TargetY", 0.0);
+        targetZ = tag.getDoubleOr("TargetZ", 0.0);
+        aimHeight = tag.getDoubleOr("AimHeight", 0.0);
+        targetPitch = tag.getFloatOr("TargetPitch", 0.0F);
+        targetYaw = tag.getFloatOr("TargetYaw", 0.0F);
+        aiming = tag.getBooleanOr("Aiming", false);
+        solvable = tag.getBooleanOr("Solvable", false);
 
-        arcMode = ArcMode.byName(tag.getString("ArcMode"));
-        arcChoice = tag.getByte("ArcChoice");
-        arcNoteKey = tag.getString("ArcNoteKey");
-        arcNoteA = tag.getDouble("ArcNoteA");
-        arcNoteB = tag.getDouble("ArcNoteB");
+        arcMode = ArcMode.byName(tag.getStringOr("ArcMode", ""));
+        arcChoice = tag.getByteOr("ArcChoice", (byte) 0);
+        arcNoteKey = tag.getStringOr("ArcNoteKey", "");
+        arcNoteA = tag.getDoubleOr("ArcNoteA", 0.0);
+        arcNoteB = tag.getDoubleOr("ArcNoteB", 0.0);
 
-        solutionAirTime = tag.getDouble("AirTime");
+        solutionAirTime = tag.getDoubleOr("AirTime", 0.0);
         calibration.load(tag);
-        pendingFireTick = tag.getLong("PendingFireTick");
-        salvoEndTick = tag.getLong("SalvoEndTick");
-        fireMode = FireMode.byName(tag.getString("FireMode"));
+        pendingFireTick = tag.getLongOr("PendingFireTick", 0L);
+        salvoEndTick = tag.getLongOr("SalvoEndTick", 0L);
+        fireMode = FireMode.byName(tag.getStringOr("FireMode", ""));
         // 瞬时状态，只有客户端包里有（存档里没有 ⇒ 读回时是 false，第一 tick 会重新判定）
-        platformMoving = tag.getBoolean("PlatformMoving");
-        rpmShort = tag.getBoolean("RpmShort");
-        rpmNeeded = tag.getInt("RpmNeeded");
+        platformMoving = tag.getBooleanOr("PlatformMoving", false);
+        rpmShort = tag.getBooleanOr("RpmShort", false);
+        rpmNeeded = tag.getIntOr("RpmNeeded", 0);
     }
 
     // ------------------------------------------------------------------ 生命周期
@@ -2657,7 +2657,7 @@ public class FireControlNodeBlockEntity extends KineticBlockEntity implements IH
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level == null || level.isClientSide) {
+        if (level == null || level.isClientSide()) {
             return;
         }
         refreshCannon();

@@ -1,6 +1,7 @@
 package net.createballistics.util;
 
 import java.util.List;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
@@ -29,12 +30,16 @@ public final class Tooltips {
      * @param args  语言键里的 {@code %s} 参数（与 {@link Component#translatable} 同一套）
      */
     public static void addLines(List<Component> tooltip, String key, ChatFormatting style, Object... args) {
+        addLines(tooltip::add, key, style, args);
+    }
+
+    public static void addLines(Consumer<Component> tooltip, String key, ChatFormatting style, Object... args) {
         String text = Component.translatable(key, args).getString();
         // split 带 -1：中间/末尾的空段要留下来，不然"空行"会被吃掉
         for (String line : text.split("\n", -1)) {
             // ⚠️ withStyle 只在 MutableComponent 上有（Component 上没有）—— literal/translatable 返回的都是它
             MutableComponent component = Component.literal(line);
-            tooltip.add(style == null ? component : component.withStyle(style));
+            tooltip.accept(style == null ? component : component.withStyle(style));
         }
     }
 }

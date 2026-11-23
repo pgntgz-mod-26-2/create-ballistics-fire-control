@@ -152,7 +152,7 @@ public class FireControlCoordinatorBlockEntity extends KineticBlockEntity
     @Override
     public void tick() {
         super.tick();
-        if (level == null || level.isClientSide) {
+        if (level == null || level.isClientSide()) {
             return;
         }
         if (++tickCounter % SCAN_INTERVAL == 0) {
@@ -321,7 +321,7 @@ public class FireControlCoordinatorBlockEntity extends KineticBlockEntity
     public void onLoad() {
         super.onLoad();
         // 客户端登记 —— 渲染器靠这份名单找该画哪个框，见 {@link RangeDisplayState}。
-        if (level != null && level.isClientSide) {
+        if (level != null && level.isClientSide()) {
             RangeDisplayState.set(worldPosition, rangeVisible);
         }
     }
@@ -595,30 +595,30 @@ public class FireControlCoordinatorBlockEntity extends KineticBlockEntity
     @Override
     protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
         super.read(tag, registries, clientPacket);
-        mode = ArcMode.byName(tag.getString("Mode"));
-        hasTarget = tag.getBoolean("HasTarget");
-        targetX = tag.getDouble("TargetX");
-        targetY = tag.getDouble("TargetY");
-        targetZ = tag.getDouble("TargetZ");
+        mode = ArcMode.byName(tag.getStringOr("Mode", ""));
+        hasTarget = tag.getBooleanOr("HasTarget", false);
+        targetX = tag.getDoubleOr("TargetX", 0.0);
+        targetY = tag.getDoubleOr("TargetY", 0.0);
+        targetZ = tag.getDoubleOr("TargetZ", 0.0);
 
         nodes.clear();
-        ListTag list = tag.getList("Nodes", Tag.TAG_COMPOUND);
+        ListTag list = tag.getListOrEmpty("Nodes");
         for (int i = 0; i < list.size(); i++) {
-            CompoundTag e = list.getCompound(i);
-            nodes.add(new BlockPos(e.getInt("X"), e.getInt("Y"), e.getInt("Z")));
+            CompoundTag e = list.getCompoundOrEmpty(i);
+            nodes.add(new BlockPos(e.getIntOr("X", 0), e.getIntOr("Y", 0), e.getIntOr("Z", 0)));
         }
-        nearbyNodeCount = tag.getInt("NearbyNodes");
-        nearbyTakenCount = tag.getInt("NearbyTaken");
-        rangeVisible = tag.getBoolean("RangeVisible");
+        nearbyNodeCount = tag.getIntOr("NearbyNodes", 0);
+        nearbyTakenCount = tag.getIntOr("NearbyTaken", 0);
+        rangeVisible = tag.getBooleanOr("RangeVisible", false);
 
-        masterPos = tag.getBoolean("HasMaster")
-                ? new BlockPos(tag.getInt("MasterX"), tag.getInt("MasterY"), tag.getInt("MasterZ"))
+        masterPos = tag.getBooleanOr("HasMaster", false)
+                ? new BlockPos(tag.getIntOr("MasterX", 0), tag.getIntOr("MasterY", 0), tag.getIntOr("MasterZ", 0))
                 : null;
 
         // ⚠️ 客户端登记**必须也在这里做一次**。
         // onLoad() 只在区块加载时跑，而扳手切换走的是 toggleRangeVisible() → sendData() → 本方法。
         // 少了这一句，服务端开关切了、客户端的渲染名单却没更新 —— 症状就是"右键完全没反应"。
-        if (level != null && level.isClientSide) {
+        if (level != null && level.isClientSide()) {
             RangeDisplayState.set(worldPosition, rangeVisible);
         }
     }

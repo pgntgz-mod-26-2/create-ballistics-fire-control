@@ -2,6 +2,7 @@
   "itemGroup.create_ballistics": "Create Big Cannons: Fire Control Ballistics",
 
   "key.categories.create_ballistics": "Create Big Cannons: Fire Control Ballistics",
+  "key.categories.create_ballistics.main": "Create: Ballistics Fire Control",
   "key.create_ballistics.open_indicator": "Open artillery indicator GUI",
   "key.create_ballistics.move_forward": "Drone: forward",
   "key.create_ballistics.move_back": "Drone: back",

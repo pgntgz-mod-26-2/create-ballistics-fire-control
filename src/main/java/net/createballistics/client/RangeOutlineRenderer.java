@@ -7,7 +7,7 @@ import net.createballistics.block.entity.FireControlComputerBlockEntity;
 import net.createballistics.block.entity.FireControlCoordinatorBlockEntity;
 import net.createballistics.block.entity.RangeDisplayToggle;
 import net.createballistics.util.RangeDisplayState;
-import net.createmod.catnip.outliner.Outliner;
+import net.createmod.catnip.api.client.outliner.Outliner;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;

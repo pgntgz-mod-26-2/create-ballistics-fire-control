@@ -1,17 +1,20 @@
 package net.createballistics.client;
 
-import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import java.text.DecimalFormat;
 import java.util.Optional;
 import net.createballistics.entity.DroneEntity;
 import net.createballistics.item.MonitorItem;
+import net.createballistics.mixin.GuiGraphicsExtractorAccessor;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.LayeredDraw;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.client.gui.render.TextureSetup;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.state.gui.GuiElementRenderState;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.util.Mth;
@@ -21,8 +24,10 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.gui.GuiLayer;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Matrix4f;
+import org.joml.Matrix3x2f;
+import org.joml.Matrix3x2fc;
 
 /**
  * 准星对着无人机时，在它头顶画一块名牌：<b>名字 + 归属 · 耐久条 · 距离</b>。
@@ -53,7 +58,7 @@ import org.joml.Matrix4f;
  * <p>⚠️ 顺带把"被墙挡住"也算进来了：方块的射线结果比无人机更近就什么都不画 ——
  * 隔着山看见自己无人机的名字会很怪。
  */
-public final class DroneInfoOverlay implements LayeredDraw.Layer {
+public final class DroneInfoOverlay implements GuiLayer {
 
     /** 看多远算数（照卓越前线：512 格）。 */
     private static final double LOOK_RANGE = 512.0;
@@ -117,8 +122,7 @@ public final class DroneInfoOverlay implements LayeredDraw.Layer {
      * 顶点直接交给 {@code RenderType.guiOverlay()} 的 vertex consumer，姿态矩阵从
      * {@code guiGraphics} 当前姿态取 —— 与 {@code GuiGraphics.fill} 用的是同一个。
      */
-    private static void fill(GuiGraphics guiGraphics, float minX, float minY, float maxX, float maxY, int color) {
-        Matrix4f matrix = guiGraphics.pose().last().pose();
+    private static void fill(GuiGraphicsExtractor guiGraphics, float minX, float minY, float maxX, float maxY, int color) {
         // 照它：允许调用方把两端写反（进度为 0 时第三个参数就落在左端左边）
         if (minX > maxX) {
             float swap = minX;
@@ -130,20 +134,51 @@ public final class DroneInfoOverlay implements LayeredDraw.Layer {
             minY = maxY;
             maxY = swap;
         }
-        VertexConsumer buffer = guiGraphics.bufferSource().getBuffer(RenderType.guiOverlay());
-        buffer.addVertex(matrix, minX, minY, 0.0F).setColor(color);
-        buffer.addVertex(matrix, minX, maxY, 0.0F).setColor(color);
-        buffer.addVertex(matrix, maxX, maxY, 0.0F).setColor(color);
-        buffer.addVertex(matrix, maxX, minY, 0.0F).setColor(color);
-        guiGraphics.flush();
+        if (maxX - minX < 1.0E-4F || maxY - minY < 1.0E-4F) {
+            return;
+        }
+        Matrix3x2f pose = new Matrix3x2f(guiGraphics.pose());
+        ScreenRectangle bounds = new ScreenRectangle(
+                (int) Math.floor(minX), (int) Math.floor(minY),
+                Math.max(1, (int) Math.ceil(maxX - minX)), Math.max(1, (int) Math.ceil(maxY - minY)))
+                .transformMaxBounds(pose);
+        ((GuiGraphicsExtractorAccessor) guiGraphics).createBallistics$guiRenderState().addGuiElement(
+                new FloatRectRenderState(RenderPipelines.GUI, TextureSetup.noTexture(), pose,
+                        minX, minY, maxX, maxY, color, bounds));
+    }
+
+    private record FloatRectRenderState(
+            RenderPipeline pipeline,
+            TextureSetup textureSetup,
+            Matrix3x2fc pose,
+            float minX,
+            float minY,
+            float maxX,
+            float maxY,
+            int color,
+            @Nullable ScreenRectangle bounds
+    ) implements GuiElementRenderState {
+
+        @Override
+        public void buildVertices(VertexConsumer vertexConsumer) {
+            vertexConsumer.addVertexWith2DPose(pose, minX, minY).setColor(color);
+            vertexConsumer.addVertexWith2DPose(pose, minX, maxY).setColor(color);
+            vertexConsumer.addVertexWith2DPose(pose, maxX, maxY).setColor(color);
+            vertexConsumer.addVertexWith2DPose(pose, maxX, minY).setColor(color);
+        }
+
+        @Override
+        public @Nullable ScreenRectangle scissorArea() {
+            return null;
+        }
     }
 
     @Override
-    public void render(GuiGraphics guiGraphics, DeltaTracker deltaTracker) {
+    public void render(GuiGraphicsExtractor guiGraphics, DeltaTracker deltaTracker) {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer player = mc.player;
         // 开着界面 / 按了 F1 就别画 —— 它是压在**世界**上的一层提示，不是 UI
-        if (player == null || mc.screen != null || mc.options.hideGui) {
+        if (player == null || mc.gui.screen() != null || mc.gui.hud.isHidden()) {
             return;
         }
         // 坐在无人机视角里时，它就在镜头前 —— 再给它自己画一块名牌是多余的
@@ -155,18 +190,7 @@ public final class DroneInfoOverlay implements LayeredDraw.Layer {
             return;
         }
 
-        // ⚠️⚠️ 锚点必须用**插值后**的位置（2026-09-26 定案）。
-        //
-        // `getBoundingBox()` 是**每 tick 一跳**的原始位置（`setPos` 里直接更新），而机身是渲染器用
-        // `Mth.lerp(partialTick, xo, x)` **平滑插值**画出来的 —— 两者差着一整 tick 的位移。
-        // 无人机慢的时候看不出来，可它现在**满速跟着飞艇走**（0.35 格/tick ≈ 7 格/秒），
-        // 在 1.5 格的距离上看，牌子就是**20 Hz 硬跳几百像素** ⇒ 用户实测"耐久条疯狂抽搐、
-        // 抽搐出幻影"（用手机拍屏还把它拖成好几份重影）。
-        // ⇒ 锚点用 `getPosition(partialTick)`，包围盒跟着平移同一段，牌子才和机身**同一处**。
-        // ⚠️ partialTick 取**相机自己用的那个**（`Camera.getPartialTickTime()`，相机 `setup` 时存下的）
-        //    —— `WorldToScreen` 用的就是 `camera.getPosition()`，两边必须同一个 partialTick，
-        //    否则锚点和相机各插值各的，还是错开一点。
-        float partialTick = mc.gameRenderer.getMainCamera().getPartialTickTime();
+        float partialTick = mc.gameRenderer.mainCamera().getCameraEntityPartialTicks(deltaTracker);
         AABB box = drone.getBoundingBox().move(drone.getPosition(partialTick).subtract(drone.position()));
         Vec3 anchor = box.getCenter().add(0.0, box.getYsize() / 2.0 + HEAD_GAP, 0.0);
         // ⚠️ 用变焦后的视场角判"看不看得见"：开镜时真实视场会收窄，拿没变焦的判会把画面外的点也当成看得见
@@ -185,28 +209,27 @@ public final class DroneInfoOverlay implements LayeredDraw.Layer {
         }
         float size = (float) (30.0 / fov * 0.9 * Mth.clamp(Math.max((LOOK_RANGE - range) / LOOK_RANGE, 0.1), 0.4, 1.0));
 
-
-        PoseStack pose = guiGraphics.pose();
-        pose.pushPose();
-        pose.translate(screen.x, screen.y + ANCHOR_LIFT, 0.0);
-        pose.scale(size, size, size);
+        var pose = guiGraphics.pose();
+        pose.pushMatrix();
+        pose.translate((float) screen.x, (float) (screen.y + ANCHOR_LIFT));
+        pose.scale(size, size);
 
         // ⚠️ 顺序也照它：名字 → 距离 → 最后画横条（它是这个次序，见 VehicleTeamOverlay）
         drawName(guiGraphics, drone, mc);
         drawRange(guiGraphics, range, mc);
         drawDurabilityBar(guiGraphics, drone);
 
-        pose.popPose();
+        pose.popMatrix();
     }
 
     /** 名字 + 归属（照它：{@code 名字 + " " + 归属} 拼成一行、同一个颜色、**不带阴影**）。没绑定时只有名字。 */
-    private static void drawName(GuiGraphics guiGraphics, DroneEntity drone, Minecraft mc) {
+    private static void drawName(GuiGraphicsExtractor guiGraphics, DroneEntity drone, Minecraft mc) {
         MutableComponent line = drone.getDisplayName().copy();
         String owner = drone.getControllerName();
         if (owner != null) {
             line.append(Component.literal(" " + owner));
         }
-        guiGraphics.drawString(mc.font, line, -mc.font.width(line) / 2, NAME_Y, COLOR_TEXT, false);
+        guiGraphics.text(mc.font, line, -mc.font.width(line) / 2, NAME_Y, COLOR_TEXT, false);
     }
 
     /**
@@ -221,7 +244,7 @@ public final class DroneInfoOverlay implements LayeredDraw.Layer {
      * 所以进度条比槽**上下各内缩半格**，读起来是"条在框里"，而不是和框连成一整块颜色。
      * ⚠️ **位置也照它**：横条以锚点为中心，我们**不再**额外下移（原先那一格是自作的偏离，已撤）。
      */
-    private static void drawDurabilityBar(GuiGraphics guiGraphics, DroneEntity drone) {
+    private static void drawDurabilityBar(GuiGraphicsExtractor guiGraphics, DroneEntity drone) {
         float ratio = Mth.clamp((float) (drone.getDurability() / DroneEntity.MAX_DURABILITY), 0.0F, 1.0F);
 
         // 顺序与数值都照它：先槽、再外框（四条 1 格厚的边）、最后进度条
@@ -234,9 +257,9 @@ public final class DroneInfoOverlay implements LayeredDraw.Layer {
     }
 
     /** 距离，写在横条下面（**照它**：一位小数 + {@code M}、同一个颜色、不带阴影）。 */
-    private static void drawRange(GuiGraphics guiGraphics, double range, Minecraft mc) {
+    private static void drawRange(GuiGraphicsExtractor guiGraphics, double range, Minecraft mc) {
         String line = DECIMAL_FORMAT_1.format(range) + "M";
-        guiGraphics.drawString(mc.font, line, -mc.font.width(line) / 2, RANGE_Y, COLOR_TEXT, false);
+        guiGraphics.text(mc.font, line, -mc.font.width(line) / 2, RANGE_Y, COLOR_TEXT, false);
     }
 
     /**

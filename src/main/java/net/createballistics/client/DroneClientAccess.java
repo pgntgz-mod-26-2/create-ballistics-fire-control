@@ -26,7 +26,7 @@ import org.jetbrains.annotations.Nullable;
  *
  * <h2>公共类该怎么用它（两条硬规矩）</h2>
  * <ol>
- *   <li><b>只在"侧别判断里面"调</b>：{@code if (level.isClientSide) { … DroneClientAccess.xxx() … }}</b>
+ *   <li><b>只在"侧别判断里面"调</b>：{@code if (level.isClientSide()) { … DroneClientAccess.xxx() … }}</b>
  *       或者只在客户端专属的方法里调（如 {@code appendHoverText}、{@code lerpTo}）——
  *       这样服务端的执行路径永远碰不到本类，连"解析"都不会发生；</li>
  *   <li><b>本类方法的签名只许用公共类型</b>（{@code Player} / {@code Entity} / {@code Level}，
@@ -63,7 +63,7 @@ public final class DroneClientAccess {
      * 那条访问转换器就是为它加的）。
      *
      * <p>⚠️ 服务端那条路在 {@code MonitorItem#findLinked} 里（{@code ServerLevel#getEntity} 本来就 O(1)）。
-     * 这里只在 {@code level.isClientSide} 的分支里被调到。
+     * 这里只在 {@code level.isClientSide()} 的分支里被调到。
      */
     @Nullable
     public static DroneEntity findClient(@Nullable Level level, UUID id) {

@@ -1,7 +1,7 @@
 package net.createballistics.client.screen;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.network.chat.Component;
 
@@ -27,9 +27,9 @@ public class PanelButton extends Button {
     }
 
     @Override
-    protected void renderWidget(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         if (!active) {
-            graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(),
+            graphics.centeredText(Minecraft.getInstance().font, getMessage(),
                     getX() + width / 2, getY() + (height - 8) / 2 + 1, LABEL_DISABLED);
             return;
         }
@@ -37,7 +37,7 @@ public class PanelButton extends Button {
         if (hot) {
             graphics.fill(getX(), getY(), getX() + width, getY() + height, HOVER_FILL);
         }
-        graphics.drawCenteredString(Minecraft.getInstance().font, getMessage(),
+        graphics.centeredText(Minecraft.getInstance().font, getMessage(),
                 getX() + width / 2, getY() + (height - 8) / 2 + 1, hot ? LABEL_HOVER : LABEL);
     }
 }

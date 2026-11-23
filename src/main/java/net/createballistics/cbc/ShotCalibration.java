@@ -281,13 +281,12 @@ public final class ShotCalibration {
 
     /** 从节点 NBT 读回；没有（老存档 / 新节点）就用默认值。 */
     public void load(CompoundTag tag) {
-        if (tag.contains("RangeScaleK")) {
-            double v = tag.getDouble("RangeScaleK");
+        tag.getDouble("RangeScaleK").ifPresent(v -> {
             if (Double.isFinite(v) && Math.abs(v) <= K_CLAMP) {
                 k = v;
             }
-        }
-        learnedShots = tag.getInt("RangeScaleShots");
+        });
+        learnedShots = tag.getIntOr("RangeScaleShots", 0);
     }
 
     private static String vec(Vec3 v) {

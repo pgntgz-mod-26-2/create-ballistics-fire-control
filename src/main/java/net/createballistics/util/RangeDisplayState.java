@@ -20,7 +20,7 @@ import net.minecraft.core.BlockPos;
  * <h2>它是公共代码，但只在客户端被填</h2>
  *
  * 类本身放在公共包里（{@code util}），因为方块实体是公共代码、服务端也要加载这个类。
- * 但它<b>只在 {@code level.isClientSide} 为真时被写入</b>，服务端那份永远是空集合。
+ * 但它<b>只在 {@code level.isClientSide()} 为真时被写入</b>，服务端那份永远是空集合。
  * 里面只有 {@link BlockPos}，不牵扯任何客户端专属类型，所以放在公共包是安全的。
  */
 public final class RangeDisplayState {
